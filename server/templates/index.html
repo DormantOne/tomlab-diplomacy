@@ -1,0 +1,4878 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1400">
+<title>Diplomacy vs. 5 LLMs</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+/* =====================================================================
+   ROOT VARIABLES + RESET
+   ===================================================================== */
+:root {
+  --bg:           #1a1814;
+  --panel:        #25221c;
+  --panel-2:      #2f2b23;
+  --ink:          #e9e1cd;
+  --ink-dim:      #b3a98e;
+  --ink-faint:    #7a6f56;
+  --line:         #4a4234;
+  --gold:         #c8a35a;
+  --gold-bright:  #f0c878;
+  --danger:       #d8492b;
+  --ok:           #6dab5b;
+
+  --sea:          #6f96b5;
+  --sea-2:        #547d9d;
+  --land:         #d8c594;
+  --land-edge:    #5a4a30;
+  --neutral-sc:   #9a8458;
+
+  /* Power colors */
+  --c-AUSTRIA:    #c83434;
+  --c-ENGLAND:    #3658a8;
+  --c-FRANCE:     #38a8b8;
+  --c-GERMANY:    #2a2a2a;
+  --c-RUSSIA:     #d8c34a;
+  --c-TURKEY:     #e0822a;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Hoefler Text', 'Georgia', serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+}
+button, input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* =====================================================================
+   TOP BAR
+   ===================================================================== */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 48px;
+  background: linear-gradient(180deg, #2c2820 0%, #1f1c16 100%);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 16px;
+  z-index: 100;
+  gap: 18px;
+}
+.topbar h1 {
+  font-size: 18px; font-weight: 600; letter-spacing: 0.06em;
+  color: var(--gold-bright);
+  font-variant: small-caps;
+}
+.phase-pill {
+  padding: 4px 12px; border: 1px solid var(--gold);
+  border-radius: 14px; font-variant: small-caps; letter-spacing: 0.08em;
+  font-size: 13px; color: var(--gold-bright); background: rgba(200,163,90,0.08);
+}
+.busy-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--danger); animation: pulse 1s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.topbar .spacer { flex: 1; }
+.topbar button {
+  background: transparent; border: 1px solid var(--line); color: var(--ink-dim);
+  padding: 6px 12px; cursor: pointer; border-radius: 4px;
+  font-variant: small-caps; letter-spacing: 0.05em;
+  transition: all 0.15s;
+}
+.topbar button:hover { border-color: var(--gold); color: var(--gold-bright); }
+
+/* =====================================================================
+   MAIN GRID LAYOUT
+   ===================================================================== */
+.grid {
+  position: fixed; top: 48px; left: 0; right: 0; bottom: 0;
+  display: grid;
+  grid-template-columns: 280px 1fr 360px;
+  grid-template-rows: 1fr;
+  gap: 0;
+}
+.col-left, .col-center, .col-right {
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.col-left  { background: var(--panel); border-right: 1px solid var(--line); }
+.col-right { background: var(--panel); border-left:  1px solid var(--line); }
+.col-center { background: #14120e; }
+
+.section-title {
+  padding: 10px 14px 6px; font-variant: small-caps; letter-spacing: 0.1em;
+  font-size: 12px; color: var(--gold); border-bottom: 1px solid var(--line);
+}
+
+/* =====================================================================
+   LEFT: POWERS + NOTES + KG INSPECTOR
+   ===================================================================== */
+.col-left .scroll { overflow-y: auto; flex: 1; }
+.power-row {
+  padding: 10px 14px; border-bottom: 1px solid var(--line);
+  cursor: pointer; transition: background 0.15s;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center;
+}
+.power-row:hover { background: var(--panel-2); }
+.power-row.is-user { background: rgba(200,163,90,0.08); }
+.power-row.eliminated { opacity: 0.4; }
+.power-flag {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid #000;
+}
+.power-row .power-name { font-weight: 600; font-variant: small-caps; letter-spacing: 0.05em; }
+.power-row .power-meta { color: var(--ink-dim); font-size: 12px; }
+.power-row .sc-count {
+  font-variant: small-caps; font-size: 11px;
+  color: var(--gold); padding: 2px 6px;
+  border: 1px solid var(--line); border-radius: 3px;
+}
+.power-row .archetype-name { font-size: 12px; color: var(--ink-dim); font-style: italic; }
+
+.notes-block {
+  padding: 8px 12px; border-bottom: 1px solid var(--line);
+}
+.notes-block label {
+  display: block; font-size: 11px; color: var(--gold); font-variant: small-caps;
+  letter-spacing: 0.06em; margin-bottom: 4px;
+}
+.notes-block textarea {
+  width: 100%; height: 70px; resize: vertical;
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--ink); padding: 6px; font-size: 12px;
+  border-radius: 3px;
+}
+.notes-block textarea:focus { outline: none; border-color: var(--gold); }
+
+.kg-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.kg-tabs button {
+  flex: 1 1 auto; padding: 4px 6px; font-size: 10px;
+  background: transparent; border: 1px solid var(--line); color: var(--ink-dim);
+  cursor: pointer; border-radius: 3px;
+  font-variant: small-caps; letter-spacing: 0.04em;
+}
+.kg-tabs button.active { background: var(--gold); color: #000; border-color: var(--gold); }
+.kg-content {
+  flex: 1; overflow-y: auto; padding: 8px 12px; font-size: 11px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-word;
+  color: var(--ink-dim);
+}
+.kg-content .kg-node { color: var(--ink); margin-top: 4px; }
+.kg-content .kg-attr { color: var(--ink-dim); }
+.kg-content .kg-edge { color: var(--gold); margin-top: 2px; }
+
+/* =====================================================================
+   CENTER: MAP + ACTION PANEL
+   ===================================================================== */
+.map-wrap {
+  flex: 1; min-height: 0; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(ellipse at center, #1d1a14 0%, #0b0907 100%);
+}
+#map {
+  width: 100%; height: 100%;
+  user-select: none;
+}
+
+.action-panel {
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  max-height: 280px; min-height: 80px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.action-panel-tabs {
+  display: flex; border-bottom: 1px solid var(--line);
+}
+.action-panel-tabs button {
+  flex: 1; background: transparent; border: 0;
+  padding: 8px 12px; cursor: pointer; color: var(--ink-dim);
+  font-variant: small-caps; letter-spacing: 0.06em;
+  border-right: 1px solid var(--line);
+}
+.action-panel-tabs button:last-child { border-right: 0; }
+.action-panel-tabs button.active {
+  color: var(--gold-bright);
+  background: var(--panel-2);
+  border-bottom: 2px solid var(--gold);
+}
+.action-panel-body {
+  padding: 10px 14px; overflow-y: auto; flex: 1;
+}
+.action-status {
+  padding: 6px 10px; background: rgba(200,163,90,0.1);
+  border-left: 3px solid var(--gold);
+  margin-bottom: 8px; font-size: 13px;
+}
+.staged-orders { font-family: monospace; font-size: 12px; color: var(--ok); }
+.staged-orders .order-line {
+  padding: 3px 6px; background: var(--bg); border-radius: 3px;
+  margin: 2px 0; display: flex; justify-content: space-between; gap: 8px;
+}
+.staged-orders .order-line button {
+  background: transparent; color: var(--danger); border: 0; cursor: pointer;
+  font-size: 14px;
+}
+
+button.primary {
+  background: var(--gold); color: #000; border: 0;
+  padding: 8px 16px; cursor: pointer; border-radius: 3px;
+  font-variant: small-caps; letter-spacing: 0.06em; font-weight: 600;
+}
+button.primary:hover { background: var(--gold-bright); }
+button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+button.secondary {
+  background: transparent; border: 1px solid var(--line); color: var(--ink-dim);
+  padding: 6px 12px; cursor: pointer; border-radius: 3px;
+  font-variant: small-caps; letter-spacing: 0.05em;
+}
+button.secondary:hover { border-color: var(--gold); color: var(--gold-bright); }
+button.danger {
+  background: transparent; border: 1px solid var(--danger); color: var(--danger);
+  padding: 6px 12px; cursor: pointer; border-radius: 3px;
+  font-variant: small-caps;
+}
+
+/* =====================================================================
+   RIGHT: MESSAGES / LOG / RULES / TUTORIAL
+   ===================================================================== */
+.right-tabs {
+  display: flex; border-bottom: 1px solid var(--line);
+}
+.right-tabs button {
+  flex: 1; background: transparent; border: 0;
+  padding: 8px 4px; cursor: pointer; color: var(--ink-dim);
+  font-variant: small-caps; letter-spacing: 0.05em; font-size: 12px;
+  border-right: 1px solid var(--line);
+}
+.right-tabs button:last-child { border-right: 0; }
+.right-tabs button.active {
+  color: var(--gold-bright); background: var(--panel-2);
+  border-bottom: 2px solid var(--gold);
+}
+.right-body {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px;
+  display: none;
+}
+.right-body.active { display: block; }
+
+/* Biopsy */
+.biopsy-btn {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink-dim); cursor: pointer;
+  padding: 1px 5px; font-size: 12px; border-radius: 3px;
+  line-height: 1;
+}
+.biopsy-btn:hover { border-color: var(--gold); color: var(--gold-bright); background: rgba(200,163,90,0.1); }
+
+.biopsy-entry {
+  border: 1px solid var(--line); border-radius: 4px;
+  margin-bottom: 8px; background: var(--panel-2);
+  overflow: hidden;
+}
+.biopsy-header {
+  padding: 8px 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+}
+.biopsy-header:hover { background: rgba(200,163,90,0.06); }
+.biopsy-entry.expanded .biopsy-header {
+  border-bottom-color: var(--line); background: rgba(200,163,90,0.08);
+}
+.biopsy-status {
+  width: 10px; height: 10px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.biopsy-status.ok { background: var(--ok); }
+.biopsy-status.fail { background: var(--danger); }
+.biopsy-step {
+  font-variant: small-caps; letter-spacing: 0.06em; font-size: 11px;
+  color: var(--gold-bright); min-width: 80px;
+}
+.biopsy-when {
+  font-size: 11px; color: var(--ink-dim); min-width: 100px;
+}
+.biopsy-summary {
+  font-size: 12px; color: var(--ink); flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.biopsy-toggle { color: var(--gold); font-size: 12px; }
+.biopsy-body {
+  display: none; padding: 10px 14px;
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px; line-height: 1.5; color: var(--ink-dim);
+}
+.biopsy-entry.expanded .biopsy-body { display: block; }
+.biopsy-section-head {
+  font-variant: small-caps; letter-spacing: 0.05em;
+  color: var(--gold); font-size: 11px;
+  margin: 10px 0 4px; padding-bottom: 2px;
+  border-bottom: 1px dotted var(--line);
+}
+.biopsy-section-head:first-child { margin-top: 0; }
+.biopsy-prompt-box, .biopsy-response-box {
+  background: var(--bg); border: 1px solid var(--line);
+  padding: 6px 8px; border-radius: 3px; max-height: 300px; overflow-y: auto;
+  color: var(--ink);
+}
+.biopsy-response-box.fail { border-color: var(--danger); color: #ffb59a; }
+.biopsy-notes-list {
+  background: var(--bg); padding: 6px 8px; border-radius: 3px;
+  border: 1px dashed var(--line);
+}
+.biopsy-notes-list .note-line { color: var(--ink); padding: 1px 0; }
+.biopsy-empty {
+  text-align: center; color: var(--ink-dim);
+  padding: 30px; font-style: italic;
+}
+.msg-row {
+  padding: 9px 11px; margin-bottom: 8px;
+  border-radius: 4px; background: var(--panel-2);
+  border-left: 4px solid var(--line);
+  /* CRITICAL: never truncate any LLM output */
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+  position: relative;
+}
+.msg-row .msg-meta {
+  font-size: 10px; color: var(--ink-faint); font-variant: small-caps;
+  letter-spacing: 0.05em; margin-bottom: 4px;
+}
+.msg-row .msg-from { font-weight: 600; color: var(--gold-bright); }
+
+/* Public messages — gold-highlighted, like a herald's proclamation */
+.msg-row.public {
+  background: linear-gradient(90deg, rgba(240,200,120,0.18) 0%, rgba(200,163,90,0.05) 100%);
+  border-left-color: var(--gold-bright);
+}
+.msg-row.public .msg-meta { color: var(--gold-bright); }
+
+/* Private messages — light blue, like a sealed letter */
+.msg-row.private {
+  background: rgba(120,170,210,0.10);
+  border-left-color: #79afd6;
+}
+.msg-row.private .msg-meta { color: #a8cce0; }
+
+/* From-the-human green stripe (only in normal mode) */
+.msg-row.fromuser { border-left-color: var(--ok); }
+.msg-row.fromuser .msg-meta { color: var(--ok); }
+
+.msg-row .msg-text { font-size: 13px; color: var(--ink); line-height: 1.5; }
+.msg-row .msg-text strong { color: var(--gold-bright); font-weight: 700; }
+.msg-row .msg-text em { color: var(--ink-dim); font-style: italic; }
+.msg-row .msg-text .msg-warn {
+  color: #ff5a3a; font-weight: 700;
+  text-shadow: 0 0 4px rgba(216,73,43,0.4);
+}
+
+.msg-compose {
+  padding: 8px 12px; border-top: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.msg-recipients { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.recipient-chip {
+  padding: 2px 8px; font-size: 11px;
+  border: 1px solid var(--line); border-radius: 10px;
+  cursor: pointer; color: var(--ink-dim);
+  font-variant: small-caps; letter-spacing: 0.04em;
+  background: var(--bg);
+}
+.recipient-chip.selected {
+  background: var(--gold); color: #000; border-color: var(--gold);
+}
+.msg-compose textarea {
+  width: 100%; height: 60px; resize: vertical;
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--ink); padding: 6px; border-radius: 3px;
+}
+.msg-compose .msg-actions {
+  display: flex; gap: 6px; margin-top: 6px; align-items: center;
+}
+.msg-compose label { font-size: 11px; color: var(--ink-dim); display:flex; gap:4px; align-items:center; }
+
+/* Log tab: never clip ANY output */
+.log-line {
+  padding: 3px 0; font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px; color: var(--ink-dim);
+  white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;
+  border-bottom: 1px dotted rgba(74,66,52,0.4);
+}
+.log-line.section { color: var(--gold-bright); font-weight: 600; margin-top: 4px; }
+.log-line.warn { color: var(--danger); }
+
+/* Rules tab */
+.rules-content { color: var(--ink); font-size: 13px; line-height: 1.6; }
+.rules-content h3 {
+  color: var(--gold-bright); font-size: 14px;
+  font-variant: small-caps; letter-spacing: 0.06em;
+  margin: 14px 0 4px;
+}
+.rules-content code {
+  background: var(--bg); padding: 1px 4px; border-radius: 2px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12px;
+}
+.rules-content ul { padding-left: 18px; margin: 4px 0 8px; }
+
+/* Tutorial bubble */
+.tutorial-bubble {
+  position: fixed;
+  background: linear-gradient(180deg, #3a3424 0%, #2a2620 100%);
+  border: 2px solid var(--gold); border-radius: 8px;
+  padding: 14px 18px; max-width: 380px; z-index: 200;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  color: var(--ink);
+}
+.tutorial-bubble h4 {
+  color: var(--gold-bright); font-variant: small-caps;
+  letter-spacing: 0.08em; margin-bottom: 6px; font-size: 13px;
+}
+.tutorial-bubble p { font-size: 13px; margin-bottom: 8px; line-height: 1.5; }
+.tutorial-bubble .tutorial-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* =====================================================================
+   MODALS
+   ===================================================================== */
+.modal-bg {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.75);
+  display: none; align-items: center; justify-content: center;
+}
+.modal-bg.active { display: flex; }
+.modal {
+  background: linear-gradient(180deg, #2a2620 0%, #1f1c16 100%);
+  border: 1px solid var(--gold);
+  border-radius: 6px; padding: 28px 32px;
+  max-width: 720px; width: 90%; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 0 40px rgba(200,163,90,0.2);
+}
+.modal h2 {
+  font-variant: small-caps; letter-spacing: 0.08em; color: var(--gold-bright);
+  font-size: 22px; margin-bottom: 14px;
+}
+.modal .row { display: flex; gap: 10px; margin: 10px 0; align-items: center; flex-wrap: wrap; }
+.modal label { font-variant: small-caps; letter-spacing: 0.04em; color: var(--ink-dim); }
+.modal input[type=text] {
+  background: var(--bg); border: 1px solid var(--line);
+  padding: 6px 10px; border-radius: 3px; flex: 1;
+}
+.modal input[type=text]:focus { outline: none; border-color: var(--gold); }
+.modal .power-pick {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0;
+}
+.modal .power-pick button {
+  padding: 14px 8px; background: var(--panel); border: 2px solid var(--line);
+  color: var(--ink); cursor: pointer; border-radius: 4px;
+  font-variant: small-caps; letter-spacing: 0.06em;
+  transition: all 0.15s;
+}
+.modal .power-pick button:hover { border-color: var(--gold); }
+.modal .power-pick button.selected { border-color: var(--gold); background: rgba(200,163,90,0.1); }
+.modal .power-pick button .pp-flag {
+  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  vertical-align: middle; margin-right: 6px; border: 1px solid #000;
+}
+
+/* End-of-game reveal */
+.reveal-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0;
+}
+.reveal-card {
+  background: var(--panel); border: 1px solid var(--line);
+  padding: 12px; border-radius: 4px;
+}
+.reveal-card h4 {
+  color: var(--gold-bright); font-variant: small-caps; letter-spacing: 0.05em;
+  margin-bottom: 4px; font-size: 14px;
+}
+.reveal-card .archetype-line { color: var(--ink-dim); font-style: italic; margin-bottom: 8px; font-size: 12px; }
+.reveal-card .your-note { color: var(--ok); font-size: 12px; padding: 6px;
+  background: rgba(109,171,91,0.08); border-radius: 3px; margin: 6px 0;
+  white-space: pre-wrap;
+}
+.reveal-card .their-view { color: var(--ink); font-size: 12px; }
+.reveal-card .trust-bar { height: 8px; background: var(--bg); border-radius: 4px; margin: 4px 0; position: relative; }
+.reveal-card .trust-bar .trust-fill {
+  position: absolute; left: 50%; top: 0; bottom: 0; transform-origin: left center;
+}
+.reveal-card .trust-bar .trust-fill.pos { background: var(--ok); }
+.reveal-card .trust-bar .trust-fill.neg { background: var(--danger); right: 50%; left: auto; transform-origin: right center; }
+
+.reveal-msg-log {
+  max-height: 240px; overflow-y: auto;
+  background: var(--bg); border: 1px solid var(--line); padding: 8px; border-radius: 4px;
+  font-size: 11px; font-family: 'SF Mono', Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* =====================================================================
+   SVG MAP STYLING — aged-parchment aesthetic with click-boxes
+   ===================================================================== */
+/* Province polygons are now visual-only background. Click targets are the boxes. */
+#map .land    { fill: #e8d4a8; stroke: #6a4a2a; stroke-width: 1.4; pointer-events: none;
+                stroke-linejoin: round; stroke-linecap: round; }
+#map .coast   { fill: #e0cb9c; stroke: #6a4a2a; stroke-width: 1.4; pointer-events: none;
+                stroke-linejoin: round; stroke-linecap: round; }
+#map .sea     { fill: rgba(168,200,222,0.4); stroke: #5a7a92; stroke-width: 0.6;
+                pointer-events: none; stroke-dasharray: 2 2; }
+
+/* Country tint overlay — applied separately, very faint so parchment shows through */
+#map .country-tint {
+  pointer-events: none;
+  fill-opacity: 0.18;
+  mix-blend-mode: multiply;
+}
+
+/* Province labels — tiny italic, only for sea provinces (land uses boxes) */
+#map text.sea-label {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', serif;
+  font-style: italic; font-size: 10px; fill: #2a4866;
+  pointer-events: none; text-anchor: middle;
+  letter-spacing: 0.04em; opacity: 0.7;
+}
+
+/* Country script labels — over each home country, decorative */
+#map text.country-label {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', serif;
+  font-style: italic; font-size: 16px;
+  pointer-events: none; text-anchor: middle;
+  letter-spacing: 0.12em; opacity: 0.42;
+  fill: #4a2a18;
+}
+
+/* SC dots */
+#map .sc-dot { fill: #9a8458; stroke: #2a2218; stroke-width: 0.8; pointer-events: none; }
+#map .sc-dot.home { stroke: #8a5a2a; stroke-width: 1.2; }
+#map .sc-dot.owned { stroke: #2a2218; stroke-width: 1.2; }
+
+/* Click-target boxes — the new primary interaction surface */
+#map .prov-box {
+  cursor: pointer;
+  rx: 2; ry: 2;
+}
+#map .prov-box-bg {
+  fill: #f0dfb4; stroke: #6a4a2a; stroke-width: 0.8;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15));
+}
+#map .prov-box.has-unit .prov-box-bg {
+  stroke: #1a1208; stroke-width: 1.4;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+}
+#map .prov-box.dislodged .prov-box-bg {
+  stroke-dasharray: 3 2; opacity: 0.7;
+}
+#map .prov-box:hover .prov-box-bg { stroke: var(--gold); stroke-width: 2; }
+
+#map .prov-box.selected .prov-box-bg {
+  stroke: var(--ok); stroke-width: 2.5;
+  filter: drop-shadow(0 0 4px var(--ok));
+}
+#map .prov-box.legal .prov-box-bg {
+  stroke: var(--gold-bright); stroke-width: 2;
+  stroke-dasharray: 3 2;
+  filter: drop-shadow(0 0 3px var(--gold-bright));
+  animation: legal-pulse 1.4s ease-in-out infinite;
+}
+#map .prov-box.convoy-target .prov-box-bg {
+  stroke: #c63cd6; stroke-width: 2;
+  stroke-dasharray: 3 2;
+  filter: drop-shadow(0 0 3px #c63cd6);
+}
+@keyframes legal-pulse {
+  0%, 100% { stroke-opacity: 1; }
+  50%      { stroke-opacity: 0.5; }
+}
+
+/* Province code in box (when empty) */
+#map text.prov-code {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', serif;
+  font-style: italic; font-size: 8px; fill: #4a3220;
+  pointer-events: none; text-anchor: middle; dominant-baseline: central;
+  letter-spacing: 0.04em;
+}
+/* Unit letter (A/F) when occupied — bigger, white */
+#map text.unit-letter {
+  font-family: 'Iowan Old Style', serif; font-weight: 700;
+  font-size: 11px; fill: #fff; pointer-events: none;
+  text-anchor: middle; dominant-baseline: central;
+  letter-spacing: 0.04em;
+}
+/* Province code shown below the box when occupied */
+#map text.prov-code-below {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', serif;
+  font-style: italic; font-size: 7.5px; fill: #3a2818;
+  pointer-events: none; text-anchor: middle;
+  letter-spacing: 0.04em; opacity: 0.85;
+}
+
+#map .arrow {
+  stroke: var(--gold-bright); stroke-width: 2; fill: none;
+  marker-end: url(#arrowhead);
+  pointer-events: none;
+  opacity: 0.9;
+}
+#map .arrow.support { stroke: #6dab5b; stroke-dasharray: 4 3; }
+#map .arrow.convoy  { stroke: #c63cd6; stroke-dasharray: 6 3; }
+
+/* Unit popover */
+.unit-popover {
+  position: absolute;
+  background: linear-gradient(180deg, #2a2620 0%, #1f1c16 100%);
+  border: 1px solid var(--gold); border-radius: 4px;
+  padding: 6px; z-index: 50;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+  display: flex; flex-direction: column; gap: 3px;
+}
+.unit-popover button {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink); cursor: pointer; padding: 4px 10px;
+  font-variant: small-caps; letter-spacing: 0.05em; font-size: 11px;
+  border-radius: 3px; min-width: 110px; text-align: left;
+}
+.unit-popover button:hover { border-color: var(--gold); background: rgba(200,163,90,0.1); }
+.unit-popover .pop-title {
+  font-size: 10px; color: var(--gold); padding: 2px 4px;
+  font-variant: small-caps; letter-spacing: 0.06em;
+  border-bottom: 1px dashed var(--line);
+}
+.unit-popover button.cancel { color: var(--danger); border-color: var(--danger); }
+
+/* Build picker */
+.build-picker { display: flex; flex-direction: column; gap: 4px; }
+.build-picker .build-row { display: flex; gap: 6px; align-items: center; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.build-picker .build-row span.label { flex: 1; font-variant: small-caps; letter-spacing: 0.04em; }
+
+/* =====================================================================
+   UTILITY
+   ===================================================================== */
+.muted { color: var(--ink-dim); }
+.tiny { font-size: 11px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.spacer { flex: 1; }
+.checkbox-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+.checkbox-row input { accent-color: var(--gold); }
+.hidden { display: none !important; }
+
+/* =====================================================================
+   SUBSTRATE PANEL — namespaced under #rb-sub
+   ===================================================================== */
+#rb-sub {
+  display: none;
+  flex-direction: column;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+#rb-sub.active { display: flex; }
+
+#rb-sub .sub-controls {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 6px;
+}
+#rb-sub .sub-row {
+  display: flex; gap: 6px; align-items: center;
+}
+#rb-sub .sub-build {
+  flex: 1;
+  background: var(--gold); color: #000;
+  border: 1px solid var(--gold);
+  padding: 7px 12px;
+  cursor: pointer; border-radius: 4px;
+  font-variant: small-caps; letter-spacing: 0.06em; font-weight: 600;
+  font-family: inherit; font-size: 13px;
+  transition: all 0.15s;
+}
+#rb-sub .sub-build:hover:not(:disabled) {
+  background: var(--gold-bright); border-color: var(--gold-bright);
+}
+#rb-sub .sub-build:disabled {
+  background: var(--line); color: var(--ink-dim);
+  border-color: var(--line); cursor: wait;
+}
+#rb-sub #sub-power-pick {
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--ink); padding: 5px 8px; font-size: 12px;
+  border-radius: 3px; min-width: 110px;
+}
+#rb-sub #sub-model-pick {
+  background: var(--bg); border: 1px solid var(--line);
+  color: var(--ink); padding: 5px 8px; font-size: 11px;
+  border-radius: 3px; flex: 1;
+  font-family: inherit;
+}
+#rb-sub .sub-model-label {
+  font-size: 11px; color: var(--ink-faint);
+  font-variant: small-caps; letter-spacing: 0.06em;
+}
+#rb-sub .sub-status {
+  font-size: 11px; color: var(--ink-dim);
+  font-family: 'SF Mono', Menlo, monospace;
+  line-height: 1.4;
+}
+#rb-sub .sub-status.err { color: var(--danger); }
+#rb-sub .sub-status.ok  { color: var(--ok); }
+
+#rb-sub .sub-graph-wrap {
+  position: relative;
+  height: 240px; flex: 0 0 240px;
+  background: #14120e;
+  border-bottom: 1px solid var(--line);
+}
+#rb-sub #sub-graph { width: 100%; height: 100%; display: block; }
+#rb-sub .sub-graph-legend {
+  position: absolute; bottom: 4px; left: 6px;
+  font-size: 10px; color: var(--ink-faint);
+  display: flex; gap: 8px; flex-wrap: wrap;
+  pointer-events: none;
+}
+#rb-sub .sub-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  vertical-align: middle; margin-right: 3px;
+}
+
+#rb-sub #sub-graph .node circle,
+#rb-sub #sub-graph .node rect { cursor: pointer; }
+#rb-sub #sub-graph .link {
+  stroke: var(--ink-faint); stroke-width: 0.8; opacity: 0.5;
+}
+#rb-sub #sub-graph .link.commitment-broken {
+  stroke: var(--danger); stroke-width: 1.5; opacity: 0.85;
+}
+#rb-sub #sub-graph .link.commitment-kept {
+  stroke: var(--ok); stroke-width: 1.5; opacity: 0.85;
+}
+#rb-sub #sub-graph .link.commitment-pending {
+  stroke: var(--gold); stroke-width: 1; opacity: 0.7;
+  stroke-dasharray: 3 2;
+}
+#rb-sub #sub-graph .node.faded { opacity: 0.2; }
+#rb-sub #sub-graph .node.highlight circle,
+#rb-sub #sub-graph .node.highlight rect {
+  stroke: var(--gold-bright); stroke-width: 2.5;
+}
+
+#rb-sub .sub-detail {
+  flex: 1; overflow-y: auto;
+  padding: 8px 12px;
+  font-size: 12px; color: var(--ink);
+  line-height: 1.5;
+}
+#rb-sub .sub-hint {
+  color: var(--ink-faint); font-style: italic; font-size: 12px;
+  padding: 4px 0;
+}
+#rb-sub .sub-detail h4 {
+  font-variant: small-caps; letter-spacing: 0.08em;
+  color: var(--gold); font-size: 11px; font-weight: 500;
+  margin: 10px 0 4px 0;
+  border-bottom: 1px dotted var(--line); padding-bottom: 3px;
+}
+#rb-sub .sub-detail h4:first-child { margin-top: 0; }
+#rb-sub .sub-detail .sub-row-item {
+  padding: 4px 2px; cursor: pointer;
+  border-bottom: 1px dotted rgba(74, 66, 52, 0.3);
+}
+#rb-sub .sub-detail .sub-row-item:hover { background: rgba(200,163,90,0.06); }
+#rb-sub .sub-detail .sub-row-item .head { color: var(--ink); font-size: 12px; }
+#rb-sub .sub-detail .sub-row-item .meta {
+  color: var(--ink-dim); font-size: 10px; margin-top: 2px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+#rb-sub .sub-detail .sub-pill {
+  display: inline-block; padding: 1px 6px; border-radius: 9px;
+  font-size: 9px; font-variant: small-caps; letter-spacing: 0.06em;
+  border: 1px solid var(--line);
+  margin-right: 5px; vertical-align: 1px;
+}
+#rb-sub .sub-detail .sub-pill.active   { color: var(--ok);     border-color: var(--ok); }
+#rb-sub .sub-detail .sub-pill.proto    { color: var(--gold);   border-color: var(--gold); }
+#rb-sub .sub-detail .sub-pill.retired  { color: var(--ink-faint); }
+#rb-sub .sub-detail .sub-pill.kept     { color: var(--ok);     border-color: var(--ok); }
+#rb-sub .sub-detail .sub-pill.broken   { color: var(--danger); border-color: var(--danger); }
+#rb-sub .sub-detail .sub-pill.pending  { color: var(--gold);   border-color: var(--gold); }
+#rb-sub .sub-detail .sub-pill.confirmed{ color: var(--ok);     border-color: var(--ok); }
+#rb-sub .sub-detail .sub-pill.refuted  { color: var(--danger); border-color: var(--danger); }
+#rb-sub .sub-detail .sub-pill.open     { color: var(--sea);    border-color: var(--sea); }
+#rb-sub .sub-detail .sub-back {
+  font-size: 11px; color: var(--ink-dim); cursor: pointer;
+  font-variant: small-caps; letter-spacing: 0.06em;
+  display: inline-block; margin-bottom: 6px;
+}
+#rb-sub .sub-detail .sub-back:hover { color: var(--gold); }
+#rb-sub .sub-detail .sub-body {
+  color: var(--ink-dim); font-size: 12px;
+  margin-top: 6px; line-height: 1.5; font-style: italic;
+}
+#rb-sub .sub-detail .sub-meta-grid {
+  display: grid; grid-template-columns: auto 1fr;
+  gap: 3px 10px; margin-top: 8px; font-size: 11px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+#rb-sub .sub-detail .sub-meta-grid .k { color: var(--ink-faint); }
+#rb-sub .sub-detail .sub-meta-grid .v { color: var(--ink-dim); }
+
+/* Substrate biopsy button + modal */
+#rb-sub .sub-biopsy {
+  background: transparent; color: var(--ink-dim);
+  border: 1px solid var(--line);
+  padding: 5px 10px; cursor: pointer; border-radius: 3px;
+  font-size: 11px; font-variant: small-caps; letter-spacing: 0.06em;
+  font-family: inherit;
+}
+#rb-sub .sub-biopsy:hover { border-color: var(--gold); color: var(--gold-bright); }
+
+#sub-biopsy-list {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+#sub-biopsy-list .biopsy-row {
+  border: 1px solid var(--line); border-radius: 4px;
+  margin-bottom: 8px; overflow: hidden;
+  background: var(--panel);
+}
+#sub-biopsy-list .biopsy-row .row-head {
+  padding: 8px 12px; cursor: pointer;
+  display: flex; gap: 12px; align-items: center;
+  user-select: none;
+}
+#sub-biopsy-list .biopsy-row .row-head:hover { background: var(--panel-2); }
+#sub-biopsy-list .biopsy-row .status-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+#sub-biopsy-list .biopsy-row.ok .status-dot { background: var(--ok); }
+#sub-biopsy-list .biopsy-row.fail .status-dot { background: var(--danger); }
+#sub-biopsy-list .biopsy-row .pname {
+  font-weight: 600; min-width: 70px; font-variant: small-caps;
+  letter-spacing: 0.05em;
+}
+#sub-biopsy-list .biopsy-row .biopsy-meta {
+  color: var(--ink-faint); font-size: 11px;
+}
+#sub-biopsy-list .biopsy-row .biopsy-error {
+  color: var(--danger); flex: 1; font-style: italic;
+}
+#sub-biopsy-list .biopsy-row .biopsy-toggle {
+  color: var(--gold); font-size: 14px;
+}
+#sub-biopsy-list .biopsy-row .row-body {
+  padding: 0; max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.18s ease;
+}
+#sub-biopsy-list .biopsy-row.expanded .row-body {
+  max-height: 12000px; padding: 0 12px 12px;
+}
+#sub-biopsy-list .biopsy-section-head {
+  margin: 12px 0 6px; font-variant: small-caps;
+  letter-spacing: 0.08em; color: var(--gold); font-size: 11px;
+  display: flex; align-items: center; gap: 8px;
+}
+#sub-biopsy-list .biopsy-section-head button {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--ink-dim); padding: 2px 8px; font-size: 10px;
+  cursor: pointer; border-radius: 3px; font-family: inherit;
+  font-variant: small-caps; letter-spacing: 0.05em;
+}
+#sub-biopsy-list .biopsy-section-head button:hover { color: var(--gold); }
+#sub-biopsy-list .biopsy-block {
+  background: var(--bg); border: 1px solid var(--line);
+  padding: 10px; border-radius: 3px;
+  white-space: pre-wrap; word-break: break-word;
+  color: var(--ink); font-size: 11px;
+  max-height: 400px; overflow-y: auto;
+}
+#sub-biopsy-list .biopsy-block.fail {
+  border-color: var(--danger);
+}
+#sub-biopsy-list .biopsy-block.empty {
+  color: var(--ink-faint); font-style: italic;
+}
+</style>
+</head>
+
+<body>
+
+<!-- =====================================================================
+     TOP BAR
+     ===================================================================== -->
+<div class="topbar">
+  <h1>Diplomacy</h1>
+  <div id="phase-pill" class="phase-pill">—</div>
+  <div id="busy-indicator" class="row hidden"><div class="busy-dot"></div><span class="tiny muted">AIs deliberating…</span></div>
+  <div class="spacer"></div>
+  <button onclick="openRulesModal()">Rules</button>
+  <button onclick="window.location='/calibrate'">Customize map</button>
+  <button onclick="endGameNow()">Resign</button>
+  <button onclick="resetMemoriesPrompt()">Wipe AI memories</button>
+  <button onclick="openKGOverlay()" class="kg-open-btn">📖 Inspect KGs</button>
+</div>
+
+<!-- =====================================================================
+     MAIN GRID
+     ===================================================================== -->
+<div class="grid">
+
+  <!-- LEFT COLUMN -->
+  <div class="col-left">
+    <div class="section-title">Powers</div>
+    <div class="scroll" id="powers-list" style="flex:0 0 auto"></div>
+    <div class="section-title">Notes on <span id="notes-target">—</span></div>
+    <div class="notes-block">
+      <textarea id="note-text" placeholder="Your private observations about this power. Hidden from the AIs. Revealed at game end alongside their notes about you."></textarea>
+    </div>
+  </div>
+
+  <!-- CENTER COLUMN -->
+  <div class="col-center">
+    <div class="map-wrap">
+      <svg id="map" viewBox="0 0 1100 720" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--gold-bright)" />
+          </marker>
+
+          <!-- Sea: soft blue gradient with subtle horizontal banding -->
+          <linearGradient id="sea-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#b8d4e2"/>
+            <stop offset="100%" stop-color="#92b6cc"/>
+          </linearGradient>
+
+          <!-- Parchment paper noise filter — gives the land a worn texture -->
+          <filter id="paper-tex" x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="7" result="noise"/>
+            <feColorMatrix in="noise" values="
+              0 0 0 0 0.55
+              0 0 0 0 0.42
+              0 0 0 0 0.22
+              0 0 0 0.18 0" result="speckle"/>
+            <feComposite in="speckle" in2="SourceGraphic" operator="in" result="masked"/>
+            <feComposite in="SourceGraphic" in2="masked" operator="over"/>
+          </filter>
+
+          <!-- Subtle vignette via a radial gradient overlay -->
+          <radialGradient id="vignette" cx="50%" cy="50%" r="65%">
+            <stop offset="60%" stop-color="rgba(0,0,0,0)"/>
+            <stop offset="100%" stop-color="rgba(60,40,20,0.25)"/>
+          </radialGradient>
+
+          <!-- Sea wave hatch pattern, very subtle -->
+          <pattern id="sea-waves" x="0" y="0" width="60" height="20" patternUnits="userSpaceOnUse">
+            <path d="M0 10 Q 15 6, 30 10 T 60 10" fill="none" stroke="#7a99af" stroke-width="0.4" opacity="0.35"/>
+          </pattern>
+        </defs>
+
+        <!-- Background sea (parchment fallback) -->
+        <g id="parchment-bg">
+          <rect x="0" y="0" width="1100" height="720" fill="url(#sea-grad)" />
+          <rect x="0" y="0" width="1100" height="720" fill="url(#sea-waves)" />
+        </g>
+
+        <!-- Custom map image (set when calibration is present, hides parchment-bg) -->
+        <g id="custom-map-layer"></g>
+
+        <g id="provinces"></g>
+        <g id="country-tints"></g>
+        <g id="country-labels"></g>
+        <g id="sc-dots"></g>
+        <g id="sea-labels"></g>
+        <g id="boxes"></g>
+        <g id="arrows"></g>
+
+        <!-- Vignette on top -->
+        <rect x="0" y="0" width="1100" height="720" fill="url(#vignette)" pointer-events="none"/>
+      </svg>
+      <div id="unit-popover" class="unit-popover hidden"></div>
+    </div>
+    <div class="action-panel">
+      <div class="action-panel-tabs">
+        <button id="t-orders" class="active" onclick="setActionTab('orders')">Orders</button>
+        <button id="t-builds" onclick="setActionTab('builds')">Builds</button>
+        <button id="t-retreat" onclick="setActionTab('retreat')">Retreats</button>
+      </div>
+      <div class="action-panel-body" id="action-body"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="col-right">
+    <div class="right-tabs">
+      <button id="rt-msg" class="active" onclick="setRightTab('msg')">Messages</button>
+      <button id="rt-log" onclick="setRightTab('log')">Log</button>
+      <button id="rt-tut" onclick="setRightTab('tut')">Tutorial</button>
+    </div>
+    <div class="right-body active" id="rb-msg" style="display:flex; flex-direction:column; padding:0;">
+      <div id="msg-list" style="flex:1; overflow-y:auto; padding:10px 12px;"></div>
+      <div class="msg-compose" id="msg-compose">
+        <div class="msg-recipients" id="msg-recipients"></div>
+        <textarea id="msg-text" placeholder="Write a message to the selected powers (or no one selected = public)…"></textarea>
+        <div class="msg-actions">
+          <label><input type="checkbox" id="msg-public"> Public</label>
+          <div class="spacer"></div>
+          <button class="secondary" onclick="sendMessage()">Send</button>
+          <button class="primary" onclick="runNegotiation()" id="btn-negotiate">Let AIs respond</button>
+        </div>
+      </div>
+    </div>
+    <div class="right-body" id="rb-log"></div>
+    <div class="right-body" id="rb-tut"><div class="rules-content">
+      <p class="muted">Tutorial controls appear here when you start in tutorial mode.</p>
+    </div></div>
+  </div>
+
+</div>
+
+<!-- =====================================================================
+     START MODAL
+     ===================================================================== -->
+<div class="modal-bg active" id="start-modal">
+  <div class="modal">
+    <h2>New Game</h2>
+    <div class="row">
+      <label>Your name</label>
+      <input type="text" id="start-name" placeholder="The AIs will remember this name across games" maxlength="60">
+    </div>
+    <div style="margin: 12px 0 6px;"><label>Choose a power</label></div>
+    <div class="power-pick" id="start-powers"></div>
+    <div class="checkbox-row"><input type="checkbox" id="start-hide-personalities"> <label for="start-hide-personalities">Hide AI personalities (revealed at end)</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="start-hide-chatter" checked> <label for="start-hide-chatter">Hide AI-to-AI chatter (revealed at end)</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="start-tutorial"> <label for="start-tutorial">Tutorial mode (scripted Spring 1901, no LLM calls)</label></div>
+    <div class="checkbox-row"><input type="checkbox" id="start-spectator"> <label for="start-spectator">🎬 Spectator mode — all 6 powers played by LLMs, you watch</label></div>
+
+    <!-- ── ABLATION PANEL ── per-power agent mode for experiments ── -->
+    <details style="margin-top: 14px; padding: 10px 14px; background: rgba(200,163,90,0.06); border: 1px solid var(--line); border-radius: 4px;">
+      <summary style="cursor:pointer; font-variant: small-caps; letter-spacing: 0.06em; color: var(--gold-bright); font-weight: 600;">
+        🧪 Ablation modes (advanced)
+      </summary>
+      <div style="margin-top: 10px; font-size: 12px; color: var(--ink-dim); font-style: italic;">
+        Per-power agent mode. <strong>full</strong> = normal V2 substrate. <strong>muted</strong> = substrate fills but is hidden from the prompt. <strong>raw_llm</strong> = no substrate at all, just board state and recent messages.
+      </div>
+      <div id="start-ablation" style="margin-top: 12px;"></div>
+    </details>
+
+    <div class="row" style="margin-top: 18px; justify-content: flex-end;">
+      <button class="secondary" onclick="loadHistory()">View past games</button>
+      <button class="primary" onclick="startGame()">Begin</button>
+    </div>
+    <div id="history-readout" style="margin-top: 12px; font-size: 12px; color: var(--ink-dim);"></div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     RULES MODAL
+     ===================================================================== -->
+<div class="modal-bg" id="rules-modal">
+  <div class="modal" style="max-width: 760px;">
+    <h2>Diplomacy — quick rules</h2>
+    <div class="rules-content">
+
+      <h3>The board</h3>
+      <p>Europe is divided into provinces. Some are <em>land</em>, some <em>sea</em>, some <em>coastal</em> (have both a coast and an interior). 34 provinces are <em>supply centers</em> — capturing them is how you grow. The first power to <strong>18</strong> wins.</p>
+      <p>This variant has 6 powers (Italy is omitted; Italian centers start neutral).</p>
+
+      <h3>Units</h3>
+      <p>Each power has armies (<code>A</code>, on land) and fleets (<code>F</code>, on sea or coast). Every unit is equal strength — there is no health, no levels, no resources beyond supply centers.</p>
+
+      <h3>Each turn — Spring then Fall</h3>
+      <ul>
+        <li><strong>Negotiate</strong> — talk privately or publicly. The AIs negotiate too; you can iterate as much as you like.</li>
+        <li><strong>Order</strong> — every unit gets one order: hold, move, support, or convoy.</li>
+        <li><strong>Resolve</strong> — orders are revealed and adjudicated simultaneously. Equal strength = bounce, both stay home.</li>
+      </ul>
+      <p>After Fall: supply centers update (whoever's army or fleet sits in one in Fall owns it). Then <em>Adjustment</em>: build a new unit at any vacant home center if you have more SCs than units; disband if fewer.</p>
+
+      <h3>Combat — strength is just unit count</h3>
+      <ul>
+        <li>One unit moving in = strength 1. A defending unit = strength 1.</li>
+        <li>A <strong>support</strong> from an adjacent unit adds 1 to either an attack or a defense.</li>
+        <li>If attacker total &gt; defender total, attacker wins and defender is dislodged.</li>
+        <li>Supports get <em>cut</em> if the supporter is itself attacked (unless from the province being supported into).</li>
+        <li>You can never dislodge your own units, even with overwhelming force.</li>
+      </ul>
+
+      <h3>Convoys</h3>
+      <p>An army can move across a sea if a friendly fleet (or a chain of friendly fleets) sits in that sea and orders <code>Convoy</code>. Order the fleet to convoy <em>and</em> the army to move; both must succeed.</p>
+
+      <h3>Dislodgement and retreats</h3>
+      <p>A dislodged unit must retreat to an empty adjacent province (one that didn't bounce in this turn and isn't where the attack came from), or disband.</p>
+
+      <h3>Talking is the whole game</h3>
+      <p>Diplomacy has no dice. The only way to win is to convince other powers to support you — and to read them well enough to know when they're lying. The AIs each have hidden personalities, hidden agendas, and a memory that <em>persists across games</em>. Stab someone today, they'll remember next time.</p>
+
+      <h3>Click-to-order in this UI</h3>
+      <ul>
+        <li>Click your unit on the map. A small popover appears with action buttons.</li>
+        <li>Highlighted yellow provinces are valid moves; click one.</li>
+        <li>For supports and convoys, the popover guides you.</li>
+        <li>Anything you don't order will hold automatically.</li>
+      </ul>
+    </div>
+    <div class="row" style="margin-top: 14px; justify-content: flex-end;">
+      <button class="secondary" onclick="closeRulesModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     END-OF-GAME REVEAL MODAL
+     ===================================================================== -->
+<div class="modal-bg" id="reveal-modal">
+  <div class="modal" style="max-width: 960px;">
+    <h2 id="reveal-title">Game over</h2>
+    <p id="reveal-summary" class="muted"></p>
+
+    <h3 style="margin-top: 18px; color: var(--gold-bright); font-variant: small-caps; letter-spacing: 0.06em;">What they thought of you</h3>
+    <div id="reveal-views" class="reveal-grid"></div>
+
+    <h3 style="margin-top: 18px; color: var(--gold-bright); font-variant: small-caps; letter-spacing: 0.06em;">All messages this game</h3>
+    <div id="reveal-msglog" class="reveal-msg-log"></div>
+
+    <div class="row" style="margin-top: 18px; justify-content: flex-end;">
+      <button class="secondary" onclick="closeRevealModal()">Close</button>
+      <button class="primary" onclick="location.reload()">New game</button>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     BIOPSY MODAL (legacy, removed — kg-biopsy-modal below is the active one)
+     ===================================================================== -->
+
+<!-- Substrate biopsy modal — separate from the legacy biopsy modal above. -->
+<div class="modal-bg" id="sub-biopsy-modal">
+  <div class="modal" style="max-width: 1100px; max-height: 90vh; display: flex; flex-direction: column;">
+    <div style="display:flex; align-items:baseline; gap:14px;">
+      <h2>🔬 Substrate Biopsy</h2>
+      <span id="sub-biopsy-subtitle" class="muted tiny" style="font-style: italic;"></span>
+      <div class="spacer"></div>
+      <button class="secondary" onclick="sub_closeBiopsyModal()">Close</button>
+    </div>
+    <p class="muted tiny" style="margin: 6px 0 10px;">
+      Per-power view of the last build's prompt + raw model response + parse result.
+      Click any row to expand. Use the copy button to share a failure with someone debugging.
+    </p>
+    <div id="sub-biopsy-list" style="flex:1; overflow-y:auto; min-height:200px;"></div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     SCRIPT
+     ===================================================================== -->
+<script>
+"use strict";
+
+// ============================================================
+// STATE
+// ============================================================
+const POWERS = ["AUSTRIA","ENGLAND","FRANCE","GERMANY","RUSSIA","TURKEY"];
+let MAP = null;            // /map response
+let STATE = null;          // /state response (full)
+let SELECTED_POWER = null; // for KG inspector and notes panel
+let SELECTED_KG = "personality";
+let MSG_RECIPIENTS = new Set();
+let LAST_LOG_LEN = 0;
+let LAST_MSG_LEN = 0;
+let STAGED_USER_ORDERS = []; // strings — built by click flow, sent on Resolve
+let STAGED_RETREATS = [];
+let STAGED_BUILDS = [];
+
+// Click-to-order state machine
+const CTO = {
+  mode: "IDLE",           // IDLE | UNIT_SELECTED | AWAIT_SUPPORT_TARGET | AWAIT_SUPPORT_DEST | AWAIT_CONVOY_ARMY | AWAIT_CONVOY_DEST
+  unit_loc: null,
+  unit_kind: null,
+  legal: null,            // last /legal response
+  support_target: null,   // {from, kind}
+  convoy_army: null,
+};
+
+const TUTORIAL_STEPS = [
+  {
+    title: "Welcome back to Diplomacy",
+    body: "You play France. We've put 5 scripted opponents in. None of them call the LLM in this tutorial — moves are predictable so the lessons land. Click 'Next' to begin.",
+  },
+  {
+    title: "Your units",
+    body: "France starts with three units: A PAR (Paris, army), A MAR (Marseilles, army), F BRE (Brest, fleet). Click any of your units on the map. They glow yellow when selected.",
+  },
+  {
+    title: "Move",
+    body: "After clicking a unit, valid moves are highlighted in yellow on the map. Click a yellow province to issue a move order. Try moving A PAR to BUR (Burgundy) — central France's natural pivot.",
+  },
+  {
+    title: "Hold",
+    body: "Anything you don't order will hold automatically. To explicitly hold, click a unit and choose 'Hold' from the popover. Try ordering F BRE to move to MAO (Mid-Atlantic Ocean) — opens up Iberia.",
+  },
+  {
+    title: "Support",
+    body: "Two units can beat one: order one to attack, another to 'Support' it. Click a unit, choose Support, then click the unit you want to support, then its destination. For now, order A MAR to move to SPA (Spain) — uncontested in 1901.",
+  },
+  {
+    title: "Resolve",
+    body: "When you've issued orders for all three units (or just left them on hold), click 'Resolve movement' below the map. Watch the log to see what happened.",
+  },
+  {
+    title: "Negotiation",
+    body: "Between movement phases is the negotiation phase. Type messages in the right panel, pick recipients (chips), and send. Click 'Let AIs respond' to make them reply. In real games, this is where Diplomacy is actually won and lost.",
+  },
+  {
+    title: "Builds (after Fall)",
+    body: "After Fall, supply centers update — whoever's army or fleet sits there owns it. If you own more centers than units, you build new ones in a vacant home center. The Build tab will appear when relevant.",
+  },
+  {
+    title: "Goal",
+    body: "First to 18 supply centers wins. There are 34 on the board. Plays of less than 18 end in alliances or stalemate. End tutorial and start a real game when you're ready.",
+  },
+];
+
+// ============================================================
+// HELPERS
+// ============================================================
+async function api(path, method = "GET", body = null) {
+  const opts = { method, headers: { "Content-Type": "application/json" } };
+  if (body !== null) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error(`${path}: ${r.status}`);
+  return r.json();
+}
+
+function powerColor(p) {
+  return getComputedStyle(document.documentElement).getPropertyValue('--c-' + p).trim();
+}
+// Some power colors (Germany's near-black) are unreadable on the dark UI.
+// For TEXT rendering on dark backgrounds we use a brightened palette.
+const POWER_TEXT_COLOR = {
+  AUSTRIA: "#ff5a4a",
+  ENGLAND: "#6a92e0",
+  FRANCE:  "#5fc8d8",
+  GERMANY: "#c0c0c0",   // near-black -> light grey for legibility
+  RUSSIA:  "#f0d860",
+  TURKEY:  "#ff9a4a",
+};
+function powerTextColor(p) { return POWER_TEXT_COLOR[p] || powerColor(p); }
+function el(tag, props = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k,v] of Object.entries(props)) {
+    if (k === "class") e.className = v;
+    else if (k === "html") e.innerHTML = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null) continue;
+    if (typeof c === "string") e.appendChild(document.createTextNode(c));
+    else e.appendChild(c);
+  }
+  return e;
+}
+
+// ============================================================
+// START SCREEN
+// ============================================================
+let START_PICKED = null;
+
+async function initStartScreen() {
+  const profile = await api("/profile");
+  if (profile.player_name) {
+    document.getElementById("start-name").value = profile.player_name;
+  }
+  const pick = document.getElementById("start-powers");
+  for (const p of POWERS) {
+    const b = el("button", { onclick: () => pickStartPower(p) },
+      el("span", { class: "pp-flag", style: `background:${powerColor(p)};` }),
+      p
+    );
+    b.dataset.power = p;
+    pick.appendChild(b);
+  }
+  buildAblationPanel();
+}
+
+function pickStartPower(p) {
+  START_PICKED = p;
+  for (const b of document.querySelectorAll(".power-pick button")) {
+    b.classList.toggle("selected", b.dataset.power === p);
+  }
+}
+
+async function startGame() {
+  const name = document.getElementById("start-name").value.trim();
+  const tutorial = document.getElementById("start-tutorial").checked;
+  const spectator = document.getElementById("start-spectator").checked;
+  if (!name) { alert("Enter a name — the AIs will remember it across games."); return; }
+  if (!tutorial && !spectator && !START_PICKED) { alert("Pick a power."); return; }
+  // Collect ablation modes
+  const agent_modes = {};
+  for (const sel of document.querySelectorAll("#start-ablation select")) {
+    const p = sel.dataset.power;
+    const m = sel.value;
+    if (p && m && m !== "full") agent_modes[p] = m;
+  }
+  const body = {
+    player_name: name,
+    power: START_PICKED || "FRANCE",
+    hide_personalities: document.getElementById("start-hide-personalities").checked,
+    hide_ai_chatter: document.getElementById("start-hide-chatter").checked,
+    tutorial: tutorial,
+    spectator: spectator,
+    agent_modes: agent_modes,
+  };
+  await api("/start", "POST", body);
+  document.getElementById("start-modal").classList.remove("active");
+  if (tutorial) {
+    setRightTab("tut");
+    showTutorialStep(0);
+  }
+  await loadMap();
+  startPolling();
+}
+
+function buildAblationPanel() {
+  // Render one row per power with a mode select. AI powers only —
+  // exclude the human seat dynamically when the user picks a power.
+  const host = document.getElementById("start-ablation");
+  if (!host) return;
+  host.innerHTML = "";
+  const powers = ["AUSTRIA","ENGLAND","FRANCE","GERMANY","RUSSIA","TURKEY"];
+  for (const p of powers) {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex; align-items:center; gap:10px; margin-bottom:6px;";
+    row.innerHTML = `
+      <span style="display:inline-block; width:9px; height:9px; border-radius:2px; background: var(--c-${p});"></span>
+      <span style="font-variant: small-caps; letter-spacing: 0.06em; min-width:80px;">${p}</span>
+      <select data-power="${p}" style="background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 3px 8px; border-radius: 3px;">
+        <option value="full">full substrate</option>
+        <option value="muted">muted (substrate hidden from prompt)</option>
+        <option value="raw_llm">raw LLM (no substrate, board+messages only)</option>
+      </select>
+    `;
+    host.appendChild(row);
+  }
+}
+
+async function loadHistory() {
+  const r = await api("/history");
+  const div = document.getElementById("history-readout");
+  if (!r.history || r.history.length === 0) {
+    div.textContent = "No games on record yet.";
+    return;
+  }
+  const lines = r.history.slice(-8).reverse().map(h => {
+    const dt = new Date((h.ended_at || 0) * 1000);
+    const w = h.winner ? `${h.winner} won` : "no winner";
+    return `${dt.toLocaleString()} — ${h.player_name || "anon"} as ${h.user_power}: ${w} (yr ${h.year_reached})`;
+  });
+  div.innerHTML = lines.join("<br>");
+}
+
+// ============================================================
+// MAP RENDERING
+// ============================================================
+async function loadMap() {
+  MAP = await api("/map");
+  drawMap();
+}
+
+function drawMap() {
+  const provG = document.getElementById("provinces");
+  const tintG = document.getElementById("country-tints");
+  const seaLabG = document.getElementById("sea-labels");
+  const scG = document.getElementById("sc-dots");
+  const ctryG = document.getElementById("country-labels");
+  const customLayer = document.getElementById("custom-map-layer");
+  const parchBg = document.getElementById("parchment-bg");
+  provG.innerHTML = ""; tintG.innerHTML = ""; seaLabG.innerHTML = "";
+  scG.innerHTML = ""; ctryG.innerHTML = ""; customLayer.innerHTML = "";
+
+  const customMode = MAP.custom_image_url && MAP.custom_coords;
+
+  // Update SVG viewBox to match either the parchment dimensions or the image
+  const svg = document.getElementById("map");
+  if (customMode) {
+    const [w, h] = MAP.custom_image_size || [MAP.view_w, MAP.view_h];
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    parchBg.style.display = "none";
+    // Render the custom image as the background
+    const img = document.createElementNS("http://www.w3.org/2000/svg", "image");
+    img.setAttribute("x", 0); img.setAttribute("y", 0);
+    img.setAttribute("width", w); img.setAttribute("height", h);
+    img.setAttribute("href", MAP.custom_image_url);
+    customLayer.appendChild(img);
+    // In custom mode, skip parchment polygons / tints / country labels / sea labels —
+    // the image already provides those. Just draw boxes (with custom coords) on top.
+    drawProvinceBoxes(MAP.custom_coords);
+    return;
+  }
+
+  // ---- Parchment fallback path ----
+  svg.setAttribute("viewBox", `0 0 ${MAP.view_w} ${MAP.view_h}`);
+  parchBg.style.display = "";
+
+  // 1. Province polygons — visual only, no click handler (boxes handle clicks)
+  for (const [code, info] of Object.entries(MAP.provinces)) {
+    if (code === "MAO_S") continue;
+    const pts = info.polygon.map(p => p.join(",")).join(" ");
+    const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    poly.setAttribute("points", pts);
+    poly.setAttribute("class", info.kind);
+    poly.dataset.code = code;
+    provG.appendChild(poly);
+  }
+
+  // 2. Country tint overlays — one transparent polygon per province, colored when SC owned.
+  //    Drawn separately so we can manipulate fills without touching the borders.
+  for (const [code, info] of Object.entries(MAP.provinces)) {
+    if (code === "MAO_S") continue;
+    if (info.kind === "sea") continue;
+    const pts = info.polygon.map(p => p.join(",")).join(" ");
+    const tint = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    tint.setAttribute("points", pts);
+    tint.setAttribute("class", "country-tint");
+    tint.dataset.code = code;
+    tint.style.fill = "transparent";
+    tintG.appendChild(tint);
+  }
+
+  // 3. SC dots
+  for (const [code, info] of Object.entries(MAP.provinces)) {
+    if (!info.sc) continue;
+    const [x, y] = info.sc;
+    const isHome = Object.values(MAP.home_centers).flat().includes(code);
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("r", 3);
+    dot.setAttribute("class", "sc-dot" + (isHome ? " home" : ""));
+    dot.dataset.code = code;
+    scG.appendChild(dot);
+  }
+
+  // 4. Sea labels (italic, no box)
+  for (const [code, info] of Object.entries(MAP.provinces)) {
+    if (code === "MAO_S") continue;
+    if (info.kind !== "sea") continue;
+    if (!info.label) continue;
+    const [x, y] = info.label;
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", x); t.setAttribute("y", y);
+    t.setAttribute("class", "sea-label");
+    t.textContent = code;
+    seaLabG.appendChild(t);
+  }
+
+  // 5. Decorative country script labels
+  const COUNTRY_LABEL_POSITIONS = {
+    "ENGLAND":  { x: 270, y: 320, text: "Britain" },
+    "FRANCE":   { x: 290, y: 510, text: "France" },
+    "GERMANY":  { x: 525, y: 410, text: "Germany" },
+    "AUSTRIA":  { x: 640, y: 470, text: "Austria" },
+    "RUSSIA":   { x: 850, y: 270, text: "Russia" },
+    "TURKEY":   { x: 870, y: 600, text: "Turkey" },
+  };
+  // Neutrals from the standard map (no Italy in this variant; centers are neutral)
+  const NEUTRAL_LABELS = [
+    { x: 175, y: 600, text: "Iberia" },
+    { x: 460, y: 580, text: "Italia" },
+    { x: 460, y: 175, text: "Scandinavia" },
+    { x: 700, y: 540, text: "Balkans" },
+  ];
+  for (const [, pos] of Object.entries(COUNTRY_LABEL_POSITIONS)) {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", pos.x); t.setAttribute("y", pos.y);
+    t.setAttribute("class", "country-label");
+    t.textContent = pos.text;
+    ctryG.appendChild(t);
+  }
+  for (const pos of NEUTRAL_LABELS) {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", pos.x); t.setAttribute("y", pos.y);
+    t.setAttribute("class", "country-label");
+    t.style.opacity = "0.28";
+    t.textContent = pos.text;
+    ctryG.appendChild(t);
+  }
+
+  // 6. Click-target boxes — drawn last so they're on top.
+  drawProvinceBoxes();
+}
+
+function drawProvinceBoxes(customCoords) {
+  const boxG = document.getElementById("boxes");
+  boxG.innerHTML = "";
+  for (const [code, info] of Object.entries(MAP.provinces)) {
+    if (code === "MAO_S") continue;
+
+    // Determine box position. Custom coords win (full override). Otherwise
+    // use the parchment label position. In parchment mode we skip seas
+    // (italic sea labels carry the name); in custom mode we draw boxes for
+    // every province that has a calibrated coord, so fleets in seas still
+    // appear at the right spot.
+    let pos;
+    if (customCoords && customCoords[code]) {
+      pos = customCoords[code];
+    } else if (info.kind === "sea") {
+      continue;
+    } else {
+      pos = info.label;
+    }
+    if (!pos) continue;
+    const [x, y] = pos;
+
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "prov-box");
+    g.setAttribute("transform", `translate(${x},${y})`);
+    g.dataset.code = code;
+
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bg.setAttribute("x", -16); bg.setAttribute("y", -8);
+    bg.setAttribute("width", 32); bg.setAttribute("height", 16);
+    bg.setAttribute("rx", 2.5); bg.setAttribute("ry", 2.5);
+    bg.setAttribute("class", "prov-box-bg");
+    g.appendChild(bg);
+
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("class", "prov-code");
+    t.setAttribute("x", 0); t.setAttribute("y", 0);
+    t.textContent = code;
+    g.appendChild(t);
+
+    g.addEventListener("click", (ev) => onProvinceClick(code, ev));
+    boxG.appendChild(g);
+  }
+}
+
+function colorProvincesBySCOwner() {
+  const board = STATE.board;
+  const ownerByCode = {};
+  for (const p of board.powers) {
+    for (const sc of p.supply_centers) ownerByCode[sc] = p.name;
+  }
+  // Tint overlays — apply to all provinces of an owner via home center membership
+  // For now: only the SC itself gets tinted (because home_centers is what ownership tracks).
+  for (const tint of document.querySelectorAll("#country-tints polygon")) {
+    const code = tint.dataset.code;
+    const owner = ownerByCode[code];
+    if (owner) {
+      tint.style.fill = powerColor(owner);
+    } else {
+      tint.style.fill = "transparent";
+    }
+  }
+  // SC dot stroke shifts to "owned" when claimed
+  for (const dot of document.querySelectorAll("#sc-dots .sc-dot")) {
+    const code = dot.dataset.code;
+    const owner = ownerByCode[code];
+    if (owner) {
+      dot.style.fill = powerColor(owner);
+      dot.classList.add("owned");
+    } else {
+      dot.style.fill = "";
+      dot.classList.remove("owned");
+    }
+  }
+}
+
+function drawUnits() {
+  // Units now occupy the province box — we just modify the existing boxes,
+  // not draw separate elements.
+  const board = STATE.board;
+  // Reset every box to its empty state first
+  for (const g of document.querySelectorAll("#boxes g.prov-box")) {
+    g.classList.remove("has-unit", "dislodged");
+    const bg = g.querySelector(".prov-box-bg");
+    bg.style.fill = "";
+    // restore province code text if unit text was drawn
+    const inner = g.querySelector("text");
+    inner.setAttribute("class", "prov-code");
+    inner.setAttribute("y", 0);
+    inner.textContent = g.dataset.code;
+    // remove any "below" code element from a previous render
+    const below = g.querySelector("text.prov-code-below");
+    if (below) below.remove();
+    // remove any stacked dislodged child
+    const ds = g.querySelector(".dislodged-marker");
+    if (ds) ds.remove();
+  }
+  // Now overlay each unit
+  for (const p of board.powers) {
+    if (p.eliminated) continue;
+    for (const u of p.units) {
+      paintUnitInBox(u.location, u.kind, p.name, false);
+    }
+  }
+  for (const d of board.dislodged || []) {
+    paintDislodgedBeside(d.location, d.kind, d.power);
+  }
+}
+
+function paintUnitInBox(code, kind, power, dislodged) {
+  const g = document.querySelector(`#boxes g.prov-box[data-code="${code}"]`);
+  if (!g) return;
+  g.classList.add("has-unit");
+  if (dislodged) g.classList.add("dislodged");
+  const bg = g.querySelector(".prov-box-bg");
+  bg.style.fill = powerColor(power);
+  // The inner text becomes the unit letter, and we add a "below" code label
+  const inner = g.querySelector("text:not(.prov-code-below)");
+  inner.setAttribute("class", "unit-letter");
+  inner.setAttribute("y", 0);
+  inner.textContent = kind;
+  // Add code below
+  const below = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  below.setAttribute("class", "prov-code-below");
+  below.setAttribute("x", 0); below.setAttribute("y", 16);
+  below.textContent = code;
+  g.appendChild(below);
+}
+
+function paintDislodgedBeside(code, kind, power) {
+  const g = document.querySelector(`#boxes g.prov-box[data-code="${code}"]`);
+  if (!g) return;
+  // Add a small offset rectangle to indicate a dislodged unit waiting to retreat
+  const marker = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  marker.setAttribute("class", "dislodged-marker");
+  marker.setAttribute("transform", "translate(18, -14)");
+  const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  rect.setAttribute("x", -8); rect.setAttribute("y", -6);
+  rect.setAttribute("width", 16); rect.setAttribute("height", 12);
+  rect.setAttribute("rx", 2);
+  rect.setAttribute("class", "prov-box-bg");
+  rect.style.fill = powerColor(power);
+  rect.style.strokeDasharray = "2 2";
+  rect.style.opacity = "0.75";
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  t.setAttribute("class", "unit-letter");
+  t.setAttribute("x", 0); t.setAttribute("y", 0);
+  t.style.fontSize = "8px";
+  t.textContent = kind + "*";
+  marker.appendChild(rect); marker.appendChild(t);
+  g.appendChild(marker);
+}
+
+function highlightLegal(legal) {
+  // Clear prior highlight states from boxes
+  for (const g of document.querySelectorAll("#boxes g.prov-box")) {
+    g.classList.remove("legal", "selected", "convoy-target");
+  }
+  if (!legal) return;
+  const origin = document.querySelector(`#boxes g.prov-box[data-code="${legal.unit.location}"]`);
+  if (origin) origin.classList.add("selected");
+  for (const m of legal.moves) {
+    const b = document.querySelector(`#boxes g.prov-box[data-code="${m}"]`);
+    if (b) b.classList.add("legal");
+  }
+}
+
+function clearArrows() { document.getElementById("arrows").innerHTML = ""; }
+
+function drawStagedArrows() {
+  const g = document.getElementById("arrows");
+  g.innerHTML = "";
+  // STAGED_USER_ORDERS contains strings — draw arrows for moves and supports
+  for (const line of STAGED_USER_ORDERS) {
+    const m = parseClientOrder(line);
+    if (!m) continue;
+    if (m.type === "M") drawArrowBetween(g, m.from, m.to, "");
+    else if (m.type === "S" && m.target_to) drawArrowBetween(g, m.target_from, m.target_to, "support");
+    else if (m.type === "C") drawArrowBetween(g, m.target_from, m.target_to, "convoy");
+  }
+}
+
+function drawArrowBetween(parent, fromCode, toCode, kindClass) {
+  const a = MAP.provinces[fromCode]; const b = MAP.provinces[toCode];
+  if (!a || !b || !a.label || !b.label) return;
+  const [x1, y1] = a.label; const [x2, y2] = b.label;
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", x1); line.setAttribute("y1", y1 + 16);
+  line.setAttribute("x2", x2); line.setAttribute("y2", y2 + 16);
+  line.setAttribute("class", "arrow " + (kindClass || ""));
+  parent.appendChild(line);
+}
+
+function parseClientOrder(line) {
+  // We only need to recognize our own staged orders for arrow-drawing.
+  // Format examples: "A PAR - BUR", "F BRE H", "A MUN S A KIE - BER", "A PAR S A MAR", "F MAO C A LON - BRE"
+  const tokens = line.trim().toUpperCase().split(/\s+/);
+  if (tokens.length < 2) return null;
+  const kind = tokens[0]; const from = tokens[1];
+  if (tokens.length === 3 && tokens[2] === "H") return { type: "H", from };
+  if (tokens.length === 4 && tokens[2] === "-") return { type: "M", from, to: tokens[3] };
+  // support move: A MUN S A KIE - BER
+  if (tokens.length === 7 && tokens[2] === "S" && tokens[5] === "-")
+    return { type: "S", from, target_from: tokens[4], target_to: tokens[6] };
+  // support hold: A PAR S A MAR
+  if (tokens.length === 5 && tokens[2] === "S")
+    return { type: "S", from, target_from: tokens[4], target_to: null };
+  // convoy: F MAO C A LON - BRE
+  if (tokens.length === 7 && tokens[2] === "C" && tokens[5] === "-")
+    return { type: "C", from, target_from: tokens[4], target_to: tokens[6] };
+  return null;
+}
+
+// ============================================================
+// CLICK-TO-ORDER
+// ============================================================
+async function onProvinceClick(code, ev) {
+  if (!STATE || !STATE.started) return;
+  const board = STATE.board;
+  if (board.finished) return;
+  if (board.awaiting !== "negotiation" && board.awaiting !== "orders") {
+    // build/retreat phases use their own UI; clicking the map can still pick a target there.
+    return handlePhaseClick(code);
+  }
+  // Find unit in this province
+  const unit = unitAt(code);
+
+  if (CTO.mode === "IDLE") {
+    if (!unit || unit.power !== board.user_power) {
+      hidePopover();
+      return;
+    }
+    await selectUnit(code, ev);
+  } else if (CTO.mode === "UNIT_SELECTED") {
+    if (CTO.legal && CTO.legal.moves.includes(code)) {
+      // commit a move
+      stageOrder(`${CTO.unit_kind} ${CTO.unit_loc} - ${code}`);
+      resetCTO();
+    } else if (code === CTO.unit_loc) {
+      // re-clicking own unit cancels
+      resetCTO();
+    } else {
+      // maybe clicked another own unit -> select that one
+      const other = unitAt(code);
+      if (other && other.power === board.user_power) {
+        await selectUnit(code, ev);
+      } else {
+        resetCTO();
+      }
+    }
+  } else if (CTO.mode === "AWAIT_SUPPORT_TARGET") {
+    // Click on the unit we want to support
+    const target = unitAt(code);
+    if (!target) { resetCTO(); return; }
+    // Is this in my legal support_holds or support_moves?
+    const supportableMove = CTO.legal.support_moves.find(s => s.from === code);
+    const supportableHold = CTO.legal.support_holds.find(s => s.location === code);
+    if (supportableMove) {
+      CTO.support_target = supportableMove;
+      CTO.mode = "AWAIT_SUPPORT_DEST";
+      showPopover(ev,
+        `Support ${target.kind} ${code}`,
+        [{
+          label: `Support hold at ${code}`,
+          onclick: () => {
+            stageOrder(`${CTO.unit_kind} ${CTO.unit_loc} S ${target.kind} ${code}`);
+            resetCTO();
+          }
+        }, {
+          label: `Support move ${code} → ${supportableMove.to}`,
+          onclick: () => {
+            stageOrder(`${CTO.unit_kind} ${CTO.unit_loc} S ${target.kind} ${code} - ${supportableMove.to}`);
+            resetCTO();
+          }
+        }, {
+          label: "Cancel", cancel: true, onclick: resetCTO,
+        }]);
+    } else if (supportableHold) {
+      stageOrder(`${CTO.unit_kind} ${CTO.unit_loc} S ${target.kind} ${code}`);
+      resetCTO();
+    } else {
+      // not a valid support target
+      resetCTO();
+    }
+  } else if (CTO.mode === "AWAIT_SUPPORT_DEST") {
+    // selected support target already, pick the move dest
+    const t = CTO.support_target;
+    if (code === t.to) {
+      stageOrder(`${CTO.unit_kind} ${CTO.unit_loc} S ${t.kind} ${t.from} - ${t.to}`);
+      resetCTO();
+    } else {
+      resetCTO();
+    }
+  } else if (CTO.mode === "AWAIT_CONVOY_ARMY") {
+    const c = CTO.legal.convoys.find(c => c.army_from === code);
+    if (!c) { resetCTO(); return; }
+    CTO.convoy_army = c;
+    CTO.mode = "AWAIT_CONVOY_DEST";
+    // highlight convoy destinations
+    for (const poly of document.querySelectorAll("#boxes g.prov-box")) {
+      poly.classList.remove("legal");
+    }
+    for (const cv of CTO.legal.convoys) {
+      if (cv.army_from === code) {
+        const p = document.querySelector(`#boxes g.prov-box[data-code="${cv.army_to}"]`);
+        if (p) p.classList.add("convoy-target");
+      }
+    }
+  } else if (CTO.mode === "AWAIT_CONVOY_DEST") {
+    const valid = CTO.legal.convoys.find(c =>
+      c.army_from === CTO.convoy_army.army_from && c.army_to === code);
+    if (!valid) { resetCTO(); return; }
+    stageOrder(`F ${CTO.unit_loc} C A ${valid.army_from} - ${valid.army_to}`);
+    // also stage the implied army move (otherwise it would just hold)
+    stageOrder(`A ${valid.army_from} - ${valid.army_to}`, /*allowOtherPower=*/true);
+    resetCTO();
+  }
+}
+
+function unitAt(code) {
+  if (!STATE || !STATE.board) return null;
+  for (const p of STATE.board.powers) {
+    for (const u of p.units) if (u.location === code) return { ...u, power: p.name };
+  }
+  return null;
+}
+
+async function selectUnit(code, ev) {
+  hidePopover();
+  const legal = await api("/legal/" + code);
+  if (legal.error) return;
+  CTO.mode = "UNIT_SELECTED";
+  CTO.unit_loc = code;
+  CTO.unit_kind = legal.unit.kind;
+  CTO.legal = legal;
+  highlightLegal(legal);
+  showUnitActionPopover(legal, ev);
+}
+
+function showUnitActionPopover(legal, ev) {
+  const buttons = [];
+  buttons.push({
+    label: "Hold",
+    onclick: () => {
+      stageOrder(`${legal.unit.kind} ${legal.unit.location} H`);
+      resetCTO();
+    }
+  });
+  if (legal.support_holds.length > 0 || legal.support_moves.length > 0) {
+    buttons.push({
+      label: "Support…",
+      onclick: () => {
+        CTO.mode = "AWAIT_SUPPORT_TARGET";
+        // highlight supportable units (their provinces)
+        const targets = new Set([
+          ...legal.support_holds.map(s => s.location),
+          ...legal.support_moves.map(s => s.from),
+        ]);
+        for (const poly of document.querySelectorAll("#boxes g.prov-box")) {
+          poly.classList.remove("legal");
+        }
+        for (const t of targets) {
+          const p = document.querySelector(`#boxes g.prov-box[data-code="${t}"]`);
+          if (p) p.classList.add("legal");
+        }
+        hidePopover();
+      }
+    });
+  }
+  if (legal.convoys.length > 0) {
+    buttons.push({
+      label: "Convoy…",
+      onclick: () => {
+        CTO.mode = "AWAIT_CONVOY_ARMY";
+        const armies = new Set(legal.convoys.map(c => c.army_from));
+        for (const poly of document.querySelectorAll("#boxes g.prov-box")) {
+          poly.classList.remove("legal");
+        }
+        for (const a of armies) {
+          const p = document.querySelector(`#boxes g.prov-box[data-code="${a}"]`);
+          if (p) p.classList.add("legal");
+        }
+        hidePopover();
+      }
+    });
+  }
+  buttons.push({ label: "Cancel", cancel: true, onclick: resetCTO });
+  showPopover(ev, `${legal.unit.kind} ${legal.unit.location}`, buttons);
+}
+
+function showPopover(ev, title, buttons) {
+  const pop = document.getElementById("unit-popover");
+  pop.innerHTML = "";
+  pop.appendChild(el("div", { class: "pop-title" }, title));
+  for (const b of buttons) {
+    const btn = el("button", {
+      class: b.cancel ? "cancel" : "",
+      onclick: b.onclick,
+    }, b.label);
+    pop.appendChild(btn);
+  }
+  pop.classList.remove("hidden");
+  // position — use clientX/Y of event
+  const x = (ev && ev.clientX) || 100;
+  const y = (ev && ev.clientY) || 100;
+  pop.style.left = (x + 12) + "px";
+  pop.style.top = (y + 8) + "px";
+}
+
+function hidePopover() {
+  document.getElementById("unit-popover").classList.add("hidden");
+}
+
+function resetCTO() {
+  CTO.mode = "IDLE";
+  CTO.unit_loc = null;
+  CTO.unit_kind = null;
+  CTO.legal = null;
+  CTO.support_target = null;
+  CTO.convoy_army = null;
+  highlightLegal(null);
+  hidePopover();
+}
+
+function stageOrder(line, allowOtherPower = false) {
+  // De-duplicate: if there's already a staged order for the same unit, replace it.
+  const tokens = line.trim().split(/\s+/);
+  if (tokens.length >= 2) {
+    const kind = tokens[0]; const loc = tokens[1];
+    STAGED_USER_ORDERS = STAGED_USER_ORDERS.filter(o => {
+      const t = o.split(/\s+/);
+      return !(t[0] === kind && t[1] === loc);
+    });
+  }
+  STAGED_USER_ORDERS.push(line);
+  drawStagedArrows();
+  renderActionPanel();
+  // Push to server so it knows the staging
+  api("/submit_orders", "POST", { orders: STAGED_USER_ORDERS });
+}
+
+function unstageOrder(idx) {
+  STAGED_USER_ORDERS.splice(idx, 1);
+  drawStagedArrows();
+  renderActionPanel();
+  api("/submit_orders", "POST", { orders: STAGED_USER_ORDERS });
+}
+
+// ============================================================
+// PHASE CLICK (retreats / builds)
+// ============================================================
+async function handlePhaseClick(code) {
+  if (!STATE) return;
+  const phase = STATE.board.awaiting;
+  if (phase === "retreats") {
+    // is this a dislodged unit of mine?
+    const dislodged = (STATE.board.dislodged || []).find(d => d.power === STATE.board.user_power);
+    if (!dislodged) return;
+    // any clicked province that is adjacent and empty: retreat there
+    STAGED_RETREATS.push(`${dislodged.kind} ${dislodged.location} R ${code}`);
+    renderActionPanel();
+  } else if (phase === "builds") {
+    // map click in build mode = pick that home center for build/disband
+    const opts = await api("/build_options");
+    if (opts.build_count > 0 && opts.available_homes.includes(code)) {
+      // ask A or F popover
+      showPopover({clientX: 200, clientY: 200}, `Build at ${code}`, [
+        { label: "Build Army", onclick: () => { STAGED_BUILDS.push(`BUILD A ${code}`); hidePopover(); renderActionPanel(); } },
+        { label: "Build Fleet", onclick: () => { STAGED_BUILDS.push(`BUILD F ${code}`); hidePopover(); renderActionPanel(); } },
+        { label: "Cancel", cancel: true, onclick: hidePopover },
+      ]);
+    } else if (opts.disband_count > 0) {
+      // clicking one of my own units toggles disband
+      const u = unitAt(code);
+      if (u && u.power === STATE.board.user_power) {
+        STAGED_BUILDS.push(`DISBAND ${u.kind} ${code}`);
+        renderActionPanel();
+      }
+    }
+  }
+}
+
+// ============================================================
+// ACTION PANEL RENDERING
+// ============================================================
+let CURRENT_ACTION_TAB = "orders";
+function setActionTab(t) {
+  CURRENT_ACTION_TAB = t;
+  for (const k of ["orders","builds","retreat"]) {
+    const b = document.getElementById("t-" + k);
+    if (b) b.classList.toggle("active", k === t);
+  }
+  renderActionPanel();
+}
+
+function renderActionPanel() {
+  if (!STATE || !STATE.started) {
+    document.getElementById("action-body").innerHTML = "";
+    return;
+  }
+  const board = STATE.board;
+  const body = document.getElementById("action-body");
+
+  if (board.spectator_mode) {
+    body.innerHTML = "";
+    renderSpectatorPanel(body);
+    return;
+  }
+  const phase = board.awaiting;
+  if (phase === "retreats") setTabSilent("retreat");
+  else if (phase === "builds") setTabSilent("builds");
+  else setTabSilent("orders");
+
+  body.innerHTML = "";
+  if (CURRENT_ACTION_TAB === "orders") renderOrdersPanel(body);
+  else if (CURRENT_ACTION_TAB === "builds") renderBuildsPanel(body);
+  else if (CURRENT_ACTION_TAB === "retreat") renderRetreatPanel(body);
+}
+
+function renderSpectatorPanel(body) {
+  const board = STATE.board;
+  const playing = board.auto_playing;
+  const status = el("div", { class: "action-status" },
+    playing
+      ? `🎬 Auto-playing — ${board.season} ${board.year} · ${board.awaiting}`
+      : `⏸ Paused — ${board.season} ${board.year} · next: ${board.awaiting}`
+  );
+  body.appendChild(status);
+
+  const row = el("div", { class: "row", style: "margin: 8px 0; gap: 8px; flex-wrap: wrap;" });
+  if (!playing) {
+    row.appendChild(el("button", { class: "primary", onclick: spectatorPlay }, "▶ Play"));
+    row.appendChild(el("button", { class: "secondary", onclick: spectatorStep }, "⏭ Step one phase"));
+  } else {
+    row.appendChild(el("button", { class: "danger", onclick: spectatorPause }, "⏸ Pause"));
+  }
+  body.appendChild(row);
+
+  const speedRow = el("div", { class: "row", style: "margin-top: 4px; gap: 8px; align-items: center;" });
+  speedRow.appendChild(el("label", { style: "font-size: 12px; color: var(--ink-dim); font-variant: small-caps; letter-spacing: 0.05em;" }, "Speed"));
+  const slider = el("input", {
+    type: "range", min: "1.5", max: "12", step: "0.5",
+    value: String(board.auto_speed),
+    style: "flex:1;",
+  });
+  slider.addEventListener("change", () => {
+    api("/auto_play", "POST", { speed: parseFloat(slider.value) });
+  });
+  speedRow.appendChild(slider);
+  speedRow.appendChild(el("span", { class: "tiny muted", style: "min-width:60px;" },
+    `${parseFloat(board.auto_speed).toFixed(1)}s/phase`));
+  body.appendChild(speedRow);
+
+  const tipRow = el("div", { class: "tiny muted", style: "margin-top: 12px; line-height: 1.5;" },
+    "Public messages glow gold. Private messages are blue. ",
+    "Threats and warnings render in red. Bold for declarations. ",
+    "Watch the messages tab on the right.");
+  body.appendChild(tipRow);
+}
+
+async function spectatorPlay() {
+  await api("/auto_play", "POST", {});
+}
+async function spectatorPause() {
+  await api("/auto_pause", "POST");
+}
+async function spectatorStep() {
+  await api("/auto_step", "POST");
+}
+
+function setTabSilent(t) {
+  CURRENT_ACTION_TAB = t;
+  for (const k of ["orders","builds","retreat"]) {
+    const b = document.getElementById("t-" + k);
+    if (b) b.classList.toggle("active", k === t);
+  }
+}
+
+function renderOrdersPanel(body) {
+  const phase = STATE.board.awaiting;
+  const status = el("div", { class: "action-status" },
+    phase === "negotiation"
+      ? "Negotiation phase — talk in the right panel, then move to orders. (Or skip straight to staging orders by clicking units.)"
+      : phase === "orders"
+        ? "Orders phase. Click your units to issue orders. Anything you don't order will hold."
+        : `Phase: ${phase}`
+  );
+  body.appendChild(status);
+
+  const stagedDiv = el("div", { class: "staged-orders" });
+  if (STAGED_USER_ORDERS.length === 0) {
+    stagedDiv.appendChild(el("div", { class: "muted tiny" }, "No orders staged yet — click a unit on the map."));
+  } else {
+    STAGED_USER_ORDERS.forEach((line, idx) => {
+      stagedDiv.appendChild(el("div", { class: "order-line" },
+        el("span", {}, line),
+        el("button", { onclick: () => unstageOrder(idx), title: "Remove" }, "✕"),
+      ));
+    });
+  }
+  body.appendChild(stagedDiv);
+
+  const row = el("div", { class: "row", style: "margin-top: 12px;" });
+  if (phase === "negotiation" || phase === "orders") {
+    row.appendChild(el("button", { class: "primary", onclick: resolveMovement }, "Resolve movement"));
+    row.appendChild(el("button", { class: "secondary", onclick: () => { STAGED_USER_ORDERS = []; drawStagedArrows(); renderActionPanel(); api('/submit_orders','POST',{orders:[]}); } }, "Clear all"));
+  }
+  body.appendChild(row);
+}
+
+function renderBuildsPanel(body) {
+  if (STATE.board.awaiting !== "builds") {
+    body.innerHTML = "<div class='muted tiny'>Builds phase appears after Fall when supply centers update.</div>";
+    return;
+  }
+  api("/build_options").then(opts => {
+    body.innerHTML = "";
+    const status = el("div", { class: "action-status" },
+      opts.delta > 0 ? `You may build ${opts.delta} unit(s). Click a vacant home center on the map.` :
+      opts.delta < 0 ? `You must disband ${-opts.delta} unit(s). Click your units on the map to mark them.` :
+      "Nothing to do — your units match your supply centers.");
+    body.appendChild(status);
+
+    if (STAGED_BUILDS.length > 0) {
+      const sg = el("div", { class: "staged-orders" });
+      STAGED_BUILDS.forEach((line, idx) => {
+        sg.appendChild(el("div", { class: "order-line" },
+          el("span", {}, line),
+          el("button", { onclick: () => { STAGED_BUILDS.splice(idx,1); renderActionPanel(); }, title: "Remove" }, "✕"),
+        ));
+      });
+      body.appendChild(sg);
+    }
+
+    const row = el("div", { class: "row", style: "margin-top: 12px;" });
+    row.appendChild(el("button", { class: "primary", onclick: resolveAdjustment }, "Submit & resolve"));
+    row.appendChild(el("button", { class: "secondary", onclick: () => { STAGED_BUILDS = []; renderActionPanel(); } }, "Clear"));
+    body.appendChild(row);
+  });
+}
+
+function renderRetreatPanel(body) {
+  if (STATE.board.awaiting !== "retreats") {
+    body.innerHTML = "<div class='muted tiny'>Retreat phase only happens when units are dislodged.</div>";
+    return;
+  }
+  const my = (STATE.board.dislodged || []).filter(d => d.power === STATE.board.user_power);
+  if (my.length === 0) {
+    body.innerHTML = "<div class='muted tiny'>You have no dislodged units. Resolve to continue.</div>";
+    body.appendChild(el("button", { class: "primary", onclick: resolveRetreats }, "Resolve retreats"));
+    return;
+  }
+  body.innerHTML = "";
+  body.appendChild(el("div", { class: "action-status" },
+    `Dislodged: ${my.map(d => d.kind + " " + d.location).join(", ")}. Click a destination province on the map, or stage 'A LOC D' to disband.`));
+  if (STAGED_RETREATS.length > 0) {
+    const sg = el("div", { class: "staged-orders" });
+    STAGED_RETREATS.forEach((line, idx) => {
+      sg.appendChild(el("div", { class: "order-line" },
+        el("span", {}, line),
+        el("button", { onclick: () => { STAGED_RETREATS.splice(idx,1); renderActionPanel(); } }, "✕"),
+      ));
+    });
+    body.appendChild(sg);
+  }
+  for (const d of my) {
+    body.appendChild(el("div", { class: "row", style: "margin-top: 6px;" },
+      el("span", {}, `Disband ${d.kind} ${d.location}: `),
+      el("button", { class: "secondary", onclick: () => { STAGED_RETREATS.push(`${d.kind} ${d.location} D`); renderActionPanel(); } }, "Disband"),
+    ));
+  }
+  body.appendChild(el("div", { class: "row", style: "margin-top: 12px;" },
+    el("button", { class: "primary", onclick: resolveRetreats }, "Resolve retreats"),
+    el("button", { class: "secondary", onclick: () => { STAGED_RETREATS = []; renderActionPanel(); } }, "Clear"),
+  ));
+}
+
+async function resolveMovement() {
+  await api("/submit_orders", "POST", { orders: STAGED_USER_ORDERS });
+  STAGED_USER_ORDERS = []; drawStagedArrows();
+  await api("/run_movement", "POST");
+}
+async function resolveRetreats() {
+  await api("/submit_retreats", "POST", { orders: STAGED_RETREATS });
+  STAGED_RETREATS = [];
+  await api("/run_retreats", "POST");
+}
+async function resolveAdjustment() {
+  await api("/submit_builds", "POST", { orders: STAGED_BUILDS });
+  STAGED_BUILDS = [];
+  await api("/run_adjustment", "POST");
+}
+
+// ============================================================
+// LEFT COLUMN: POWERS, NOTES, KG INSPECTOR
+// ============================================================
+function renderPowersList() {
+  const list = document.getElementById("powers-list");
+  list.innerHTML = "";
+  for (const p of STATE.board.powers) {
+    const flag = el("div", { class: "power-flag", style: `background:${powerColor(p.name)};` });
+    const meta = el("div", {},
+      el("div", { class: "power-name" }, p.name + (p.is_user ? " (you)" : "")),
+      el("div", { class: "archetype-name" }, p.is_user ? "" : (p.agent || "Unknown")),
+    );
+    const sc = el("div", { class: "sc-count" }, p.supply_centers.length + " SC");
+    const right = el("div", { class: "power-right", style: "display:flex; gap:6px; align-items:center;" }, sc);
+    if (!p.is_user) {
+      const bio = el("button", {
+        class: "biopsy-btn",
+        title: "Inspect this AI's prompts and responses",
+        onclick: (ev) => { ev.stopPropagation(); openBiopsyModalForPower(p.name); },
+      }, "🔬");
+      right.appendChild(bio);
+    }
+    const row = el("div", {
+      class: "power-row" + (p.is_user ? " is-user" : "") + (p.eliminated ? " eliminated" : ""),
+      onclick: () => selectPowerForInspection(p.name),
+    }, flag, meta, right);
+    list.appendChild(row);
+  }
+}
+
+async function selectPowerForInspection(power) {
+  SELECTED_POWER = power;
+  document.getElementById("notes-target").textContent = power;
+  // load note from server
+  const notes = await api("/notes");
+  document.getElementById("note-text").value = notes[power] || "";
+  // (legacy KG tabs removed — full inspector is in the 📖 Inspect KGs overlay)
+}
+
+// (legacy loadKG() removed — replaced by the fullscreen Knowledge Inspector)
+
+document.getElementById("note-text").addEventListener("blur", saveNoteIfNeeded);
+async function saveNoteIfNeeded() {
+  if (!SELECTED_POWER) return;
+  const t = document.getElementById("note-text").value;
+  await api("/notes", "POST", { [SELECTED_POWER]: t });
+}
+
+// ============================================================
+// RIGHT COLUMN: MESSAGES / LOG / TUTORIAL
+// ============================================================
+function setRightTab(t) {
+  for (const k of ["msg","log","tut"]) {
+    document.getElementById("rt-" + k).classList.toggle("active", k === t);
+    document.getElementById("rb-" + k).classList.toggle("active", k === t);
+  }
+}
+
+function renderMessageRecipients() {
+  const div = document.getElementById("msg-recipients");
+  div.innerHTML = "";
+  for (const p of POWERS) {
+    if (p === STATE.board.user_power) continue;
+    const chip = el("span", {
+      class: "recipient-chip" + (MSG_RECIPIENTS.has(p) ? " selected" : ""),
+      onclick: () => {
+        if (MSG_RECIPIENTS.has(p)) MSG_RECIPIENTS.delete(p);
+        else MSG_RECIPIENTS.add(p);
+        renderMessageRecipients();
+      },
+    }, p);
+    div.appendChild(chip);
+  }
+}
+
+function formatMessageText(text) {
+  // Escape HTML, then apply our LLM-friendly formatting tokens.
+  const div = document.createElement("div");
+  div.textContent = text;
+  let s = div.innerHTML;
+  // [!]...[/!]  →  red bold span
+  s = s.replace(/\[!\]([\s\S]*?)\[\/!\]/g, '<span class="msg-warn">$1</span>');
+  // **xxx**  →  <strong>
+  s = s.replace(/\*\*([^*\n][\s\S]*?)\*\*/g, '<strong>$1</strong>');
+  // *xxx*  →  <em>  (single asterisks, but only when both sides have non-space)
+  s = s.replace(/(^|[^*])\*([^*\s][^*\n]*?[^*\s]?)\*(?!\*)/g, '$1<em>$2</em>');
+  return s;
+}
+
+async function refreshMessages() {
+  const r = await api("/messages");
+  if (r.messages.length === LAST_MSG_LEN) return;
+  LAST_MSG_LEN = r.messages.length;
+  const div = document.getElementById("msg-list");
+  div.innerHTML = "";
+  const userPower = STATE && STATE.board ? STATE.board.user_power : "";
+  for (const m of r.messages) {
+    const tags = [m.public ? "PUBLIC" : ("→ " + (m.recipients.length ? m.recipients.join(",") : "—"))];
+    tags.push(`${m.season} ${m.year}`);
+    const isPublic = m.public;
+    const fromUser = userPower && m.sender === userPower;
+    const cls = "msg-row"
+      + (isPublic ? " public" : " private")
+      + (fromUser ? " fromuser" : "");
+    const meta = el("div", { class: "msg-meta" },
+      el("span", { class: "msg-from", style: `color:${powerTextColor(m.sender)};` }, m.sender),
+      " ",
+      ...tags.map(t => el("span", {}, "· " + t + " ")),
+    );
+    const txt = el("div", { class: "msg-text", html: formatMessageText(m.text) });
+    div.appendChild(el("div", { class: cls }, meta, txt));
+  }
+  div.scrollTop = div.scrollHeight;
+}
+
+async function sendMessage() {
+  const text = document.getElementById("msg-text").value.trim();
+  if (!text) return;
+  const isPublic = document.getElementById("msg-public").checked;
+  await api("/send_message", "POST", {
+    recipients: Array.from(MSG_RECIPIENTS),
+    public: isPublic,
+    text,
+  });
+  document.getElementById("msg-text").value = "";
+}
+
+async function runNegotiation() {
+  document.getElementById("btn-negotiate").disabled = true;
+  await api("/run_negotiation", "POST");
+}
+
+function renderLog() {
+  const log = (STATE && STATE.log_tail) || [];
+  if (log.length === LAST_LOG_LEN) return;
+  LAST_LOG_LEN = log.length;
+  const div = document.getElementById("rb-log");
+  div.innerHTML = "";
+  for (const line of log) {
+    const cls = "log-line" + (line.startsWith("---") || line.startsWith("***") ? " section" : "")
+                + (line.toLowerCase().includes("error") || line.toLowerCase().includes("dislodged") ? " warn" : "");
+    div.appendChild(el("div", { class: cls }, line));
+  }
+  div.scrollTop = div.scrollHeight;
+}
+
+// ============================================================
+// TUTORIAL
+// ============================================================
+let CURRENT_TUTORIAL_STEP = -1;
+function showTutorialStep(idx) {
+  CURRENT_TUTORIAL_STEP = idx;
+  const div = document.getElementById("rb-tut");
+  if (idx >= TUTORIAL_STEPS.length) {
+    div.innerHTML = `
+      <div class="rules-content">
+        <h3>Tutorial complete</h3>
+        <p>You've seen the basics. Now resign and start a real game — the AIs are waiting, and they remember.</p>
+        <p><button class="primary" onclick="endGameNow()">End tutorial</button></p>
+      </div>`;
+    return;
+  }
+  const s = TUTORIAL_STEPS[idx];
+  div.innerHTML = "";
+  div.appendChild(el("div", { class: "rules-content" },
+    el("h3", {}, `Step ${idx+1} / ${TUTORIAL_STEPS.length}: ${s.title}`),
+    el("p", {}, s.body),
+    el("div", { class: "row" },
+      idx > 0 ? el("button", { class: "secondary", onclick: () => showTutorialStep(idx-1) }, "Back") : null,
+      el("button", { class: "primary", onclick: () => { api("/tutorial/advance","POST"); showTutorialStep(idx+1); } }, "Next"),
+    ),
+  ));
+}
+
+// ============================================================
+// END-OF-GAME REVEAL
+// ============================================================
+async function endGameNow() {
+  if (!confirm("End the current game? This will save persistent KGs and show the reveal.")) return;
+  await api("/end_game", "POST");
+  setTimeout(showReveal, 300);
+}
+
+async function showReveal() {
+  const r = await api("/end_reveal");
+  document.getElementById("reveal-modal").classList.add("active");
+  const t = document.getElementById("reveal-title");
+  if (r.winner) t.textContent = `${r.winner} wins`;
+  else t.textContent = "Game ended";
+  document.getElementById("reveal-summary").textContent =
+    `Personalities revealed below. Their views of you are taken from each AI's theory_of_mind graph at the moment the game ended.`;
+
+  const grid = document.getElementById("reveal-views");
+  grid.innerHTML = "";
+  const userPower = STATE.board.user_power;
+  for (const [pname, view] of Object.entries(r.ai_views_of_user)) {
+    if (pname === userPower) continue;
+    const myNote = (r.user_notes && r.user_notes[pname]) || "";
+    const reveal = r.personalities_revealed[pname];
+    const trust = view.trust_in_user || 0;
+    const trustPct = Math.min(50, Math.abs(trust) * 50);
+    const trustClass = trust >= 0 ? "pos" : "neg";
+
+    const cf = view.counterfactuals_about_user || [];
+    const cfList = cf.map(c =>
+      el("div", { class: "tiny", style: "margin-top:4px; color:var(--ink-dim);" },
+        `↳ ${c.label}: ${c.premise} → ${c.expected}`)
+    );
+
+    const card = el("div", { class: "reveal-card" },
+      el("h4", {}, pname + " — " + (reveal ? reveal.display_name : view.archetype_display)),
+      el("div", { class: "archetype-line" }, reveal ? reveal.tagline : ""),
+      el("div", { style: "font-variant: small-caps; letter-spacing: 0.04em; color: var(--ink-dim); font-size: 11px; margin-top: 6px;" }, "Their view of you"),
+      el("div", { class: "trust-bar" },
+        el("div", { class: "trust-fill " + trustClass, style: `width: ${trustPct}%;` })
+      ),
+      el("div", { class: "tiny muted" }, `trust: ${trust.toFixed(2)}  ·  messages exchanged: ${view.comm_count}`),
+      view.predicted_intent ? el("div", { class: "their-view", style: "margin-top: 4px;" }, "predicted intent: " + view.predicted_intent) : null,
+      view.last_reason ? el("div", { class: "their-view", style: "margin-top: 4px;" }, "last reason: " + view.last_reason) : null,
+      cfList.length ? el("div", { style: "margin-top: 6px; font-variant: small-caps; letter-spacing: 0.04em; color: var(--ink-dim); font-size: 11px;" }, "Counterfactuals about you") : null,
+      ...cfList,
+      myNote ? el("div", { style: "font-variant: small-caps; letter-spacing: 0.04em; color: var(--ink-dim); font-size: 11px; margin-top: 8px;" }, "Your note") : null,
+      myNote ? el("div", { class: "your-note" }, myNote) : null,
+    );
+    grid.appendChild(card);
+  }
+
+  const log = document.getElementById("reveal-msglog");
+  log.innerHTML = "";
+  for (const m of r.messages) {
+    const tag = m.public ? "PUBLIC" : "→ " + (m.recipients || []).join(",");
+    log.appendChild(el("div", {},
+      el("span", { style: "color:" + powerTextColor(m.sender) }, m.sender),
+      ` ${tag} [${m.season} ${m.year}]: ${m.text}`,
+    ));
+  }
+}
+
+function closeRevealModal() { document.getElementById("reveal-modal").classList.remove("active"); }
+function openRulesModal() { document.getElementById("rules-modal").classList.add("active"); }
+function closeRulesModal() { document.getElementById("rules-modal").classList.remove("active"); }
+
+// ============================================================
+// BIOPSY
+// (legacy modal removed — see openBiopsyModal / loadBiopsyForPower
+//  near the bottom for the active modal that the 🔬 button uses.)
+// ============================================================
+
+async function resetMemoriesPrompt() {
+  if (!confirm("Wipe all archetype memories from past games? This cannot be undone.")) return;
+  const r = await api("/reset_memories", "POST");
+  alert(`Wiped ${r.deleted} archetype memory file(s).`);
+}
+
+// ============================================================
+// SUBSTRATE PANEL
+//
+// Lives in the right column under the "Substrate" tab.
+// Calls /api/substrate/* (provided by server/substrate_routes.py)
+// to (re)build a substrate-shaped view of all 6 powers.
+// Renders as a small d3 force graph + click-to-drill detail list.
+//
+// All functions prefixed sub_* to avoid collisions with the rest
+// of the legacy frontend. State is held on a single SUB object.
+// ============================================================
+
+const SUB = {
+  initialized: false,
+  selectedPower: null,
+  pollHandle: null,
+  status: null,
+  minds: {},                // power -> mind dict (cached after build)
+  drillId: null,            // currently drilled node id
+  sim: null,                // d3 force simulation handle
+};
+
+const SUB_POWER_COLORS = {
+  AUSTRIA: "#c83434", ENGLAND: "#3658a8", FRANCE: "#38a8b8",
+  GERMANY: "#2a2a2a", RUSSIA: "#d8c34a", TURKEY: "#e0822a",
+};
+const SUB_STATUS_COLORS = {
+  active: "#6dab5b", proto: "#c8a35a", retired: "#7a6f56",
+  kept: "#6dab5b", broken: "#d8492b", pending: "#c8a35a",
+  confirmed: "#6dab5b", refuted: "#d8492b", open: "#6f96b5",
+};
+const SUB_POWERS = ["AUSTRIA","ENGLAND","FRANCE","GERMANY","RUSSIA","TURKEY"];
+
+function sub_escapeHtml(s) {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// Called by setRightTab when the user opens the Substrate tab.
+function onSubstrateTabOpened() {
+  if (!SUB.initialized) {
+    sub_initOnce();
+    SUB.initialized = true;
+  }
+  sub_startPolling();
+  sub_renderForCurrentPower();
+}
+
+function sub_initOnce() {
+  // Wire the build button
+  document.getElementById("sub-build-btn").addEventListener("click", sub_triggerBuild);
+  // Wire the biopsy button
+  const bbtn = document.getElementById("sub-biopsy-btn");
+  if (bbtn) bbtn.addEventListener("click", sub_openBiopsyModal);
+  // Populate the power picker
+  const sel = document.getElementById("sub-power-pick");
+  sel.innerHTML = "";
+  for (const p of SUB_POWERS) {
+    const opt = document.createElement("option");
+    opt.value = p; opt.textContent = p;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener("change", () => {
+    SUB.selectedPower = sel.value;
+    SUB.drillId = null;
+    sub_renderForCurrentPower();
+  });
+  // Default selection: first non-user power
+  const userPower = (STATE && STATE.board) ? STATE.board.user_power : null;
+  SUB.selectedPower = SUB_POWERS.find(p => p !== userPower) || SUB_POWERS[0];
+  sel.value = SUB.selectedPower;
+}
+
+function sub_startPolling() {
+  if (SUB.pollHandle) return;
+  const tick = async () => {
+    try {
+      const r = await fetch("/api/substrate/status");
+      if (r.ok) {
+        const s = await r.json();
+        sub_updateStatus(s);
+        const prev = SUB.status;
+        const prevCompleted = prev ? prev.completed : 0;
+        const completedNow = s.completed;
+        SUB.status = s;
+        // Progressive rendering: refresh minds whenever the completed count
+        // has advanced (not just at the very end). Also refresh once after
+        // the build wraps up so we catch the final powers.
+        const justFinished = prev && prev.in_progress && !s.in_progress;
+        if (justFinished || completedNow > prevCompleted) {
+          await sub_loadAllMinds();
+          sub_renderForCurrentPower();
+        }
+      }
+    } catch (_) { /* swallow — non-critical */ }
+    // Poll fast while building, slow when idle
+    const next = (SUB.status && SUB.status.in_progress) ? 1200 : 4000;
+    SUB.pollHandle = setTimeout(tick, next);
+  };
+  tick();
+}
+
+function sub_stopPolling() {
+  if (SUB.pollHandle) { clearTimeout(SUB.pollHandle); SUB.pollHandle = null; }
+}
+
+async function sub_loadAllMinds() {
+  try {
+    const r = await fetch("/api/substrate/all");
+    if (!r.ok) return;
+    const data = await r.json();
+    SUB.minds = data.minds || {};
+  } catch (e) { console.warn("sub: load all failed:", e); }
+}
+
+function sub_updateStatus(s) {
+  const stEl = document.getElementById("sub-status");
+  const btn = document.getElementById("sub-build-btn");
+  if (!stEl || !btn) return;
+  if (s.in_progress) {
+    btn.disabled = true;
+    btn.textContent = `Building… ${s.completed}/${s.total}`;
+    stEl.className = "sub-status";
+    stEl.textContent = `analyzing ${s.completed}/${s.total} powers (${s.last_model || "haiku"})`;
+  } else {
+    btn.disabled = false;
+    btn.textContent = s.completed > 0 ? "Rebuild substrate view" : "Build substrate view";
+    const errs = s.errors || {};
+    if (Object.keys(errs).length) {
+      stEl.className = "sub-status err";
+      stEl.textContent = "errors: " + Object.entries(errs).map(([p,e]) => `${p}: ${e}`).join("  ·  ");
+    } else if (s.completed > 0) {
+      stEl.className = "sub-status ok";
+      const dt = s.finished_at && s.started_at ? Math.round(s.finished_at - s.started_at) : 0;
+      stEl.textContent = `built ${s.completed}/${s.total} · phase ${s.last_build_phase || "?"} · ${dt}s`;
+    } else {
+      stEl.className = "sub-status";
+      stEl.textContent = "No build yet. Substrate will auto-build after every phase, or you can click Build now.";
+    }
+  }
+}
+
+async function sub_triggerBuild() {
+  const btn = document.getElementById("sub-build-btn");
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = "Starting…";
+  const modelPick = document.getElementById("sub-model-pick");
+  const model = (modelPick && modelPick.value) || "claude-haiku-4-5-20251001";
+  try {
+    const r = await fetch("/api/substrate/build", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({model: model}),
+    });
+    const data = await r.json();
+    if (!r.ok) {
+      const stEl = document.getElementById("sub-status");
+      stEl.className = "sub-status err";
+      stEl.textContent = data.error || "build failed";
+      btn.disabled = false;
+      btn.textContent = "Build substrate view";
+      return;
+    }
+    sub_updateStatus(data);
+  } catch (e) {
+    const stEl = document.getElementById("sub-status");
+    stEl.className = "sub-status err";
+    stEl.textContent = "network error: " + e.message;
+    btn.disabled = false;
+    btn.textContent = "Build substrate view";
+  }
+}
+
+function sub_renderForCurrentPower() {
+  const power = SUB.selectedPower;
+  if (!power) return;
+  const mind = SUB.minds[power];
+  if (!mind) {
+    sub_clearGraph();
+    document.getElementById("sub-detail").innerHTML =
+      '<div class="sub-hint">No build yet. Click "Build substrate view" to start.</div>';
+    return;
+  }
+  sub_renderGraph(mind);
+  if (SUB.drillId) {
+    sub_renderDrill(mind, SUB.drillId);
+  } else {
+    sub_renderSummary(mind);
+  }
+}
+
+// ---- D3 graph ----
+
+function sub_clearGraph() {
+  if (SUB.sim) { SUB.sim.stop(); SUB.sim = null; }
+  d3.select("#sub-graph").selectAll("*").remove();
+}
+
+function sub_renderGraph(mind) {
+  sub_clearGraph();
+  const svg = d3.select("#sub-graph");
+  const owner = mind.owner_power;
+  const w = svg.node().clientWidth || 320;
+  const h = svg.node().clientHeight || 240;
+
+  const nodes = [{ id: `power:${owner}`, kind: "self", power: owner, r: 13 }];
+  for (const p of SUB_POWERS) {
+    if (p === owner) continue;
+    nodes.push({ id: `power:${p}`, kind: "power", power: p, r: 10 });
+  }
+  const links = [];
+
+  for (const b of (mind.beliefs || [])) {
+    nodes.push({ id: b.id, kind: "belief", status: b.status, r: 6, _data: b });
+    if (b.about && SUB_POWERS.includes(b.about)) {
+      links.push({ source: `power:${b.about}`, target: b.id, distance: 28 });
+    }
+  }
+  for (const p of (mind.recent_predictions || [])) {
+    nodes.push({ id: p.id, kind: "prediction", status: p.status, r: 4, _data: p });
+    if (p.about && SUB_POWERS.includes(p.about)) {
+      links.push({ source: `power:${p.about}`, target: p.id, distance: 20 });
+    }
+  }
+  for (const it of (mind.strategic_intents || [])) {
+    nodes.push({ id: it.id, kind: "intent", status: it.status, r: 7, _data: it });
+    const tps = it.target_powers || [];
+    if (tps.length === 0) {
+      links.push({ source: `power:${owner}`, target: it.id, distance: 36 });
+    } else {
+      for (const t of tps) {
+        if (SUB_POWERS.includes(t)) {
+          links.push({ source: `power:${t}`, target: it.id, distance: 36 });
+        }
+      }
+    }
+  }
+  for (const c of (mind.self_commitments || [])) {
+    if (SUB_POWERS.includes(c.to)) {
+      links.push({ source: `power:${owner}`, target: `power:${c.to}`,
+                   cls: `commitment-${c.status}`, distance: 60, _commit: c });
+    }
+  }
+  for (const c of (mind.incoming_commitments || [])) {
+    if (SUB_POWERS.includes(c.speaker)) {
+      links.push({ source: `power:${c.speaker}`, target: `power:${owner}`,
+                   cls: `commitment-${c.status}`, distance: 60, _commit: c });
+    }
+  }
+
+  // Anchor power nodes evenly around the perimeter
+  const others = SUB_POWERS.filter(p => p !== owner);
+  others.forEach((p, i) => {
+    const angle = (i / others.length) * 2 * Math.PI - Math.PI / 2;
+    const node = nodes.find(n => n.id === `power:${p}`);
+    if (node) {
+      node.fx = w/2 + Math.cos(angle) * Math.min(w, h) * 0.36;
+      node.fy = h/2 + Math.sin(angle) * Math.min(w, h) * 0.36;
+    }
+  });
+  const self = nodes.find(n => n.id === `power:${owner}`);
+  if (self) { self.fx = w/2; self.fy = h/2; }
+
+  SUB.sim = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d => d.id)
+      .distance(d => d.distance || 28).strength(0.5))
+    .force("charge", d3.forceManyBody().strength(-70))
+    .force("collide", d3.forceCollide().radius(d => (d.r || 5) + 2));
+
+  const linkSel = svg.append("g")
+    .selectAll("line").data(links).join("line")
+    .attr("class", d => "link " + (d.cls || ""));
+
+  const nodeSel = svg.append("g")
+    .selectAll("g").data(nodes).join("g")
+    .attr("class", "node")
+    .attr("data-id", d => d.id)
+    .on("click", (e, d) => sub_onNodeClick(d))
+    .on("mouseenter", (e, d) => sub_highlight(d.id))
+    .on("mouseleave", () => sub_clearHighlight());
+
+  nodeSel.each(function(d) {
+    const sel = d3.select(this);
+    if (d.kind === "self") {
+      sel.append("circle").attr("r", 13)
+        .attr("fill", SUB_POWER_COLORS[owner])
+        .attr("stroke", "#000").attr("stroke-width", 1.4);
+      sel.append("text").attr("text-anchor","middle").attr("dy",3)
+        .attr("fill","white").style("font-size","9px").style("font-weight","700")
+        .text(owner.slice(0,3));
+    } else if (d.kind === "power") {
+      sel.append("circle").attr("r", 10)
+        .attr("fill", SUB_POWER_COLORS[d.power] || "#888")
+        .attr("opacity", 0.65).attr("stroke","#000").attr("stroke-width",0.8);
+      sel.append("text").attr("text-anchor","middle").attr("dy",3)
+        .attr("fill","white").style("font-size","8px").style("font-weight","700")
+        .text(d.power.slice(0,3));
+    } else if (d.kind === "belief") {
+      sel.append("circle").attr("r", 6)
+        .attr("fill", SUB_STATUS_COLORS[d.status] || "#aaa")
+        .attr("stroke","#1a1814").attr("stroke-width",0.8);
+    } else if (d.kind === "prediction") {
+      sel.append("circle").attr("r", 4)
+        .attr("fill", SUB_STATUS_COLORS[d.status] || "#888")
+        .attr("stroke","#1a1814").attr("stroke-width",0.6);
+    } else if (d.kind === "intent") {
+      sel.append("rect").attr("x",-7).attr("y",-5).attr("width",14).attr("height",10)
+        .attr("fill","#8a5b9a").attr("opacity",0.8)
+        .attr("stroke","#1a1814").attr("stroke-width",0.8);
+    }
+  });
+
+  SUB.sim.on("tick", () => {
+    linkSel
+      .attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+    nodeSel.attr("transform", d => `translate(${d.x||0},${d.y||0})`);
+  });
+}
+
+function sub_highlight(id) {
+  if (!id) { sub_clearHighlight(); return; }
+  d3.selectAll("#sub-graph .node").classed("faded", true).classed("highlight", false);
+  d3.selectAll("#sub-graph .link").classed("faded", true);
+  d3.selectAll(`#sub-graph .node[data-id="${id}"]`).classed("faded", false).classed("highlight", true);
+  d3.selectAll("#sub-graph .link").filter(function(d) {
+    return d.source.id === id || d.target.id === id;
+  }).classed("faded", false).each(function(d) {
+    const otherId = d.source.id === id ? d.target.id : d.source.id;
+    d3.select(`#sub-graph .node[data-id="${otherId}"]`).classed("faded", false);
+  });
+}
+
+function sub_clearHighlight() {
+  d3.selectAll("#sub-graph .node").classed("faded", false).classed("highlight", false);
+  d3.selectAll("#sub-graph .link").classed("faded", false);
+}
+
+function sub_onNodeClick(d) {
+  if (d.kind === "self" || d.kind === "power") return;
+  SUB.drillId = d.id;
+  sub_highlight(d.id);
+  const mind = SUB.minds[SUB.selectedPower];
+  if (mind) sub_renderDrill(mind, d.id);
+}
+
+// ---- Detail rendering ----
+
+function sub_pillHTML(status) {
+  return `<span class="sub-pill ${status||''}">${status||""}</span>`;
+}
+
+function sub_renderSummary(mind) {
+  const detail = document.getElementById("sub-detail");
+  detail.innerHTML = "";
+
+  const beliefs  = mind.beliefs || [];
+  const intents  = mind.strategic_intents || [];
+  const incoming = mind.incoming_commitments || [];
+  const selfC    = mind.self_commitments || [];
+  const preds    = mind.recent_predictions || [];
+
+  // Beliefs
+  detail.appendChild(sub_h4(`Beliefs (${beliefs.length})`));
+  if (beliefs.length === 0) detail.appendChild(sub_hint("No beliefs."));
+  else {
+    const sorted = [...beliefs].sort((a, b) => {
+      const ord = {active:0, proto:1, retired:2};
+      return (ord[a.status]||9) - (ord[b.status]||9);
+    });
+    for (const b of sorted) detail.appendChild(sub_makeRow_belief(b));
+  }
+
+  detail.appendChild(sub_h4(`Strategic intents (${intents.length})`));
+  if (intents.length === 0) detail.appendChild(sub_hint("None."));
+  else for (const it of intents) detail.appendChild(sub_makeRow_intent(it));
+
+  detail.appendChild(sub_h4(`Promises to ${mind.owner_power} (${incoming.length})`));
+  if (incoming.length === 0) detail.appendChild(sub_hint("None."));
+  else for (const c of incoming) detail.appendChild(sub_makeRow_commit(c, "in"));
+
+  detail.appendChild(sub_h4(`Promises by ${mind.owner_power} (${selfC.length})`));
+  if (selfC.length === 0) detail.appendChild(sub_hint("None."));
+  else for (const c of selfC) detail.appendChild(sub_makeRow_commit(c, "out"));
+
+  detail.appendChild(sub_h4(`Predictions (${preds.length})`));
+  if (preds.length === 0) detail.appendChild(sub_hint("None."));
+  else for (const p of preds) detail.appendChild(sub_makeRow_prediction(p));
+}
+
+function sub_h4(text) {
+  const e = document.createElement("h4");
+  e.textContent = text;
+  return e;
+}
+function sub_hint(text) {
+  const e = document.createElement("div");
+  e.className = "sub-hint";
+  e.textContent = text;
+  return e;
+}
+
+function sub_makeRow_belief(b) {
+  const row = document.createElement("div");
+  row.className = "sub-row-item";
+  row.innerHTML = `
+    <div class="head">${sub_pillHTML(b.status)}${sub_escapeHtml(b.head)}</div>
+    <div class="meta">about <b style="color:${SUB_POWER_COLORS[b.about]||'#aaa'}">${b.about||"?"}</b>
+      · ${b.type} · hp ${(b.hp||0).toFixed(2)}
+      · +${b.evidence_for_count||0}/-${b.evidence_against_count||0}</div>
+  `;
+  row.addEventListener("click", () => {
+    SUB.drillId = b.id; sub_highlight(b.id);
+    sub_renderDrill(SUB.minds[SUB.selectedPower], b.id);
+  });
+  return row;
+}
+
+function sub_makeRow_intent(it) {
+  const row = document.createElement("div");
+  row.className = "sub-row-item";
+  const targets = (it.target_powers || []).join(",") || "—";
+  const provs = (it.target_provinces || []).join(",") || "";
+  row.innerHTML = `
+    <div class="head">${sub_pillHTML(it.status)}${sub_escapeHtml(it.head)}</div>
+    <div class="meta">${it.horizon||"medium"} · targets: ${targets}${provs ? " · " + provs : ""}</div>
+  `;
+  row.addEventListener("click", () => {
+    SUB.drillId = it.id; sub_highlight(it.id);
+    sub_renderDrill(SUB.minds[SUB.selectedPower], it.id);
+  });
+  return row;
+}
+
+function sub_makeRow_commit(c, dir) {
+  const row = document.createElement("div");
+  row.className = "sub-row-item";
+  const who = dir === "in" ? c.speaker : c.to;
+  const arrow = dir === "in" ? "→" : "←";
+  row.innerHTML = `
+    <div class="head">${sub_pillHTML(c.status)}<b style="color:${SUB_POWER_COLORS[who]||'#aaa'}">${who||"?"}</b> ${arrow} ${sub_escapeHtml(c.raw || c.type)}</div>
+    <div class="meta">deadline: ${c.deadline_phase||"?"}</div>
+  `;
+  row.addEventListener("click", () => {
+    SUB.drillId = c.id;
+    sub_renderDrill(SUB.minds[SUB.selectedPower], c.id);
+  });
+  return row;
+}
+
+function sub_makeRow_prediction(p) {
+  const row = document.createElement("div");
+  row.className = "sub-row-item";
+  row.innerHTML = `
+    <div class="head">${sub_pillHTML(p.status)}<b style="color:${SUB_POWER_COLORS[p.about]||'#aaa'}">${p.about||"?"}</b> · ${p.type} ${p.target||""}</div>
+    <div class="meta">conf ${(p.confidence||0).toFixed(2)} · ${p.window_kind||"near"}</div>
+  `;
+  row.addEventListener("click", () => {
+    SUB.drillId = p.id; sub_highlight(p.id);
+    sub_renderDrill(SUB.minds[SUB.selectedPower], p.id);
+  });
+  return row;
+}
+
+function sub_renderDrill(mind, nodeId) {
+  if (!mind) return;
+  const find = arr => (arr||[]).find(x => x.id === nodeId);
+  const target =
+    find(mind.beliefs) ||
+    find(mind.strategic_intents) ||
+    find(mind.recent_predictions) ||
+    find(mind.incoming_commitments) ||
+    find(mind.self_commitments);
+  if (!target) return;
+
+  let kind = "belief";
+  if (nodeId.startsWith("intent:")) kind = "intent";
+  else if (nodeId.startsWith("pred:")) kind = "prediction";
+  else if (nodeId.startsWith("cmt:")) kind = "commit";
+
+  const detail = document.getElementById("sub-detail");
+  detail.innerHTML = "";
+
+  const back = document.createElement("div");
+  back.className = "sub-back";
+  back.textContent = "← back to all";
+  back.addEventListener("click", () => {
+    SUB.drillId = null;
+    sub_clearHighlight();
+    sub_renderSummary(mind);
+  });
+  detail.appendChild(back);
+
+  if (kind === "belief") {
+    detail.innerHTML += `<h4>Belief ${sub_pillHTML(target.status)}</h4>`;
+    detail.innerHTML += `<div>${sub_escapeHtml(target.head)}</div>`;
+    if (target.body) detail.innerHTML += `<div class="sub-body">${sub_escapeHtml(target.body)}</div>`;
+    detail.innerHTML += sub_metaGrid({
+      "id": target.id, "about": target.about, "type": target.type,
+      "hp": (target.hp||0).toFixed(2),
+      "evidence": `+${target.evidence_for_count||0} / -${target.evidence_against_count||0}`,
+      "formed at": target.formed_at, "last updated": target.last_updated,
+    });
+  } else if (kind === "intent") {
+    detail.innerHTML += `<h4>Intent ${sub_pillHTML(target.status)}</h4>`;
+    detail.innerHTML += `<div>${sub_escapeHtml(target.head)}</div>`;
+    if (target.body) detail.innerHTML += `<div class="sub-body">${sub_escapeHtml(target.body)}</div>`;
+    detail.innerHTML += sub_metaGrid({
+      "id": target.id, "horizon": target.horizon,
+      "target powers": (target.target_powers||[]).join(", ") || "—",
+      "target provinces": (target.target_provinces||[]).join(", ") || "—",
+      "formed at": target.formed_at,
+    });
+  } else if (kind === "prediction") {
+    detail.innerHTML += `<h4>Prediction ${sub_pillHTML(target.status)}</h4>`;
+    detail.innerHTML += `<div>${target.about} · ${target.type} ${target.target||""}</div>`;
+    if (target.rationale) detail.innerHTML += `<div class="sub-body">${sub_escapeHtml(target.rationale)}</div>`;
+    detail.innerHTML += sub_metaGrid({
+      "id": target.id, "window": target.prediction_window,
+      "kind": target.window_kind, "confidence": (target.confidence||0).toFixed(2),
+    });
+  } else if (kind === "commit") {
+    detail.innerHTML += `<h4>Commitment ${sub_pillHTML(target.status)}</h4>`;
+    const dir = target.speaker ? "incoming" : "outgoing";
+    const who = target.speaker || target.to;
+    detail.innerHTML += `<div>${dir.toUpperCase()} · ${who||"?"}</div>`;
+    if (target.raw) detail.innerHTML += `<div class="sub-body">"${sub_escapeHtml(target.raw)}"</div>`;
+    detail.innerHTML += sub_metaGrid({
+      "id": target.id, "type": target.type,
+      "subject": target.subject_province || "—",
+      "target province": target.target_province || "—",
+      "deadline": target.deadline_phase || "—",
+    });
+  }
+}
+
+function sub_metaGrid(obj) {
+  const rows = Object.entries(obj).map(([k, v]) =>
+    `<span class="k">${k}</span><span class="v">${sub_escapeHtml(v||"")}</span>`
+  ).join("");
+  return `<div class="sub-meta-grid">${rows}</div>`;
+}
+
+// ---- Substrate biopsy modal ----
+
+async function sub_openBiopsyModal() {
+  const modal = document.getElementById("sub-biopsy-modal");
+  const list = document.getElementById("sub-biopsy-list");
+  const sub = document.getElementById("sub-biopsy-subtitle");
+  list.innerHTML = '<div class="muted tiny" style="padding:20px;">Loading…</div>';
+  modal.classList.add("active");
+  try {
+    const r = await fetch("/api/substrate/biopsy_all");
+    if (!r.ok) {
+      list.innerHTML = '<div class="muted tiny" style="padding:20px;">Failed to load biopsies.</div>';
+      return;
+    }
+    const data = await r.json();
+    const biopsies = data.biopsies || {};
+    const phaseLabels = new Set(Object.values(biopsies).map(b => b.build_phase));
+    const modelLabels = new Set(Object.values(biopsies).map(b => b.model));
+    sub.textContent = `phase: ${[...phaseLabels].join(", ")} \u00b7 model: ${[...modelLabels].join(", ")}`;
+    list.innerHTML = "";
+    if (Object.keys(biopsies).length === 0) {
+      list.innerHTML = '<div class="muted tiny" style="padding:20px;">No biopsies yet \u2014 trigger a build first.</div>';
+      return;
+    }
+    for (const power of SUB_POWERS) {
+      const b = biopsies[power];
+      if (!b) continue;
+      list.appendChild(sub_makeBiopsyRow(b));
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="muted tiny" style="padding:20px;">Network error: ${sub_escapeHtml(e.message)}</div>`;
+  }
+}
+
+function sub_closeBiopsyModal() {
+  document.getElementById("sub-biopsy-modal").classList.remove("active");
+}
+
+function sub_makeBiopsyRow(b) {
+  const row = document.createElement("div");
+  row.className = "biopsy-row " + (b.parsed_ok ? "ok" : "fail");
+
+  const head = document.createElement("div");
+  head.className = "row-head";
+  head.innerHTML = `
+    <span class="status-dot"></span>
+    <span class="pname">${sub_escapeHtml(b.power)}</span>
+    <span class="biopsy-meta">prompt ${b.prompt_length} ch \u00b7 response ${b.response_length} ch</span>
+    ${b.parsed_ok ? '' : `<span class="biopsy-error">${sub_escapeHtml(b.error || "")}</span>`}
+    <span class="biopsy-toggle">\u25b8</span>
+  `;
+  head.addEventListener("click", () => {
+    row.classList.toggle("expanded");
+    head.querySelector(".biopsy-toggle").textContent =
+      row.classList.contains("expanded") ? "\u25be" : "\u25b8";
+  });
+  row.appendChild(head);
+
+  const body = document.createElement("div");
+  body.className = "row-body";
+
+  // Prompt section
+  const promptHead = document.createElement("div");
+  promptHead.className = "biopsy-section-head";
+  const copyP = document.createElement("button");
+  copyP.textContent = "Copy";
+  copyP.addEventListener("click", (e) => {
+    e.stopPropagation();
+    sub_copyText(b.prompt);
+    copyP.textContent = "Copied";
+    setTimeout(() => copyP.textContent = "Copy", 1200);
+  });
+  promptHead.append("Prompt sent to model", copyP);
+  body.appendChild(promptHead);
+  const promptBlock = document.createElement("div");
+  promptBlock.className = "biopsy-block" + (b.prompt ? "" : " empty");
+  promptBlock.textContent = b.prompt || "(empty)";
+  body.appendChild(promptBlock);
+
+  // Response section
+  const respHead = document.createElement("div");
+  respHead.className = "biopsy-section-head";
+  const copyR = document.createElement("button");
+  copyR.textContent = "Copy";
+  copyR.addEventListener("click", (e) => {
+    e.stopPropagation();
+    sub_copyText(b.raw_response);
+    copyR.textContent = "Copied";
+    setTimeout(() => copyR.textContent = "Copy", 1200);
+  });
+  respHead.append("Raw response from model", copyR);
+  body.appendChild(respHead);
+  const respBlock = document.createElement("div");
+  respBlock.className = "biopsy-block" + (b.parsed_ok ? "" : " fail")
+                       + (b.raw_response ? "" : " empty");
+  respBlock.textContent = b.raw_response || "(empty)";
+  body.appendChild(respBlock);
+
+  // Outcome section
+  const outHead = document.createElement("div");
+  outHead.className = "biopsy-section-head";
+  outHead.textContent = "Outcome";
+  body.appendChild(outHead);
+  const outBlock = document.createElement("div");
+  outBlock.className = "biopsy-block" + (b.parsed_ok ? "" : " fail");
+  outBlock.textContent = b.parsed_ok
+    ? `parsed_ok: true \u2014 mind populated for ${b.power}`
+    : `parsed_ok: false \u2014 ${b.error || "unknown failure"}`;
+  body.appendChild(outBlock);
+
+  row.appendChild(body);
+  return row;
+}
+
+function sub_copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text || "").catch(() => {
+      sub_fallbackCopy(text);
+    });
+  } else {
+    sub_fallbackCopy(text);
+  }
+}
+
+function sub_fallbackCopy(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text || "";
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); } catch (_) {}
+  document.body.removeChild(ta);
+}
+
+// ============================================================
+// POLLING
+// ============================================================
+let POLL_INTERVAL = null;
+function startPolling() {
+  refreshState();
+  if (POLL_INTERVAL) clearInterval(POLL_INTERVAL);
+  POLL_INTERVAL = setInterval(refreshState, 1800);
+}
+
+let _ALREADY_REVEALED = false;
+async function refreshState() {
+  try {
+    const r = await api("/state");
+    if (!r.started) return;
+    STATE = r;
+
+    const board = r.board;
+    document.getElementById("phase-pill").textContent =
+      `${board.season} ${board.year} · ${board.awaiting}`
+      + (board.spectator_mode ? " · 🎬 spectator" : "");
+
+    // Busy indicator
+    const busy = document.getElementById("busy-indicator");
+    busy.classList.toggle("hidden", !r.ai_busy);
+    const btnNeg = document.getElementById("btn-negotiate");
+    if (btnNeg) btnNeg.disabled = r.ai_busy;
+
+    // Hide the human-only compose UI in spectator mode
+    const compose = document.getElementById("msg-compose");
+    if (compose) compose.style.display = board.spectator_mode ? "none" : "";
+
+    colorProvincesBySCOwner();
+    drawUnits();
+    drawStagedArrows();
+    renderPowersList();
+    renderActionPanel();
+    if (!board.spectator_mode) renderMessageRecipients();
+    renderLog();
+    refreshMessages();
+
+    if (board.finished && !_ALREADY_REVEALED) {
+      _ALREADY_REVEALED = true;
+      setTimeout(showReveal, 400);
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// Hide popover on outside click or Escape
+document.addEventListener("click", (e) => {
+  const pop = document.getElementById("unit-popover");
+  if (pop.classList.contains("hidden")) return;
+  if (pop.contains(e.target)) return;
+  // is the click inside a province box? if so, let the box handler process it
+  const inBox = e.target.closest && e.target.closest("g.prov-box");
+  if (inBox) return;
+  hidePopover();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") resetCTO();
+});
+
+// ============================================================
+// INIT
+// ============================================================
+initStartScreen();
+</script>
+
+<!-- ====================================================================
+     KG FULLSCREEN INSPECTOR
+     Reveal: top-bar button "📖 Inspect KGs". Esc closes.
+     Data:   /api/substrate/all (substrate observer — LLM reconstruction
+             of each AI's mind from message log + moves so far)
+     ==================================================================== -->
+
+<style>
+.kg-open-btn {
+  background: rgba(200,163,90,0.14);
+  border: 1px solid var(--gold);
+  color: var(--gold-bright);
+  padding: 5px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  transition: background 0.15s;
+}
+.kg-open-btn:hover { background: rgba(200,163,90,0.26); }
+
+.kg-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(10, 8, 5, 0.97);
+  display: none; flex-direction: column;
+  font-family: inherit;
+}
+.kg-overlay.open { display: flex; animation: kg-fadein 0.18s ease-out; }
+@keyframes kg-fadein { from { opacity: 0; } to { opacity: 1; } }
+
+.kg-overlay-head {
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 18px;
+  padding: 12px 22px;
+  background: linear-gradient(180deg, #2c2820 0%, #1a1814 100%);
+  border-bottom: 1px solid var(--gold);
+}
+.kg-overlay-title {
+  font-variant: small-caps; letter-spacing: 0.1em;
+  color: var(--gold-bright);
+  font-size: 19px; font-weight: 600;
+}
+.kg-overlay-subtitle {
+  color: var(--ink-dim);
+  font-style: italic;
+  font-size: 13px;
+}
+.kg-overlay-close {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  padding: 5px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+.kg-overlay-close:hover { color: var(--ink); border-color: var(--ink-dim); }
+
+.kg-power-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+.kg-power-tabs button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--line);
+  border-bottom: 3px solid transparent;
+  padding: 14px 10px;
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+.kg-power-tabs button:last-child { border-right: none; }
+.kg-power-tabs button:hover { background: rgba(200,163,90,0.05); color: var(--ink); }
+.kg-power-tabs button.active {
+  color: var(--gold-bright);
+  background: rgba(200,163,90,0.10);
+  border-bottom-color: var(--gold);
+}
+.kg-power-color {
+  display: inline-block; width: 9px; height: 9px;
+  border-radius: 2px; margin-right: 8px; vertical-align: middle;
+}
+.kg-power-archetype {
+  display: block; font-size: 10px; color: var(--ink-faint);
+  font-variant: normal; letter-spacing: 0;
+  margin-top: 3px; font-style: italic;
+}
+
+.kg-body { flex: 1 1 auto; display: flex; overflow: hidden; }
+
+.kg-lens-rail {
+  flex: 0 0 220px;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  padding: 14px 0;
+  overflow-y: auto;
+}
+.kg-lens-rail button {
+  display: block; width: 100%; text-align: left;
+  background: transparent; border: none;
+  border-left: 3px solid transparent;
+  color: var(--ink-dim);
+  padding: 11px 18px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+.kg-lens-rail button:hover { background: rgba(200,163,90,0.05); color: var(--ink); }
+.kg-lens-rail button.active {
+  color: var(--gold-bright);
+  background: rgba(200,163,90,0.10);
+  border-left-color: var(--gold);
+}
+.kg-lens-rail button.flagship {
+  font-weight: 600;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+}
+.kg-lens-rail button .kg-lens-sub {
+  display: block; font-size: 11px; color: var(--ink-faint);
+  font-weight: normal; font-variant: normal; letter-spacing: 0;
+  margin-top: 3px;
+}
+.kg-lens-rail-divider {
+  border-top: 1px solid var(--line);
+  margin: 10px 14px;
+}
+
+.kg-content-area {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 24px 32px;
+}
+
+.kg-status-bar {
+  flex: 0 0 auto;
+  padding: 10px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.kg-status-bar .kg-build-btn {
+  margin-left: auto;
+  background: rgba(200,163,90,0.14);
+  border: 1px solid var(--gold);
+  color: var(--gold-bright);
+  padding: 5px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  font-size: 12px;
+}
+.kg-status-bar .kg-build-btn:hover { background: rgba(200,163,90,0.26); }
+.kg-status-bar .kg-build-btn:disabled { opacity: 0.5; cursor: wait; }
+
+/* ── ToM CARDS (flagship lens) ────────────────────────────── */
+.kg-tom-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 18px;
+}
+.kg-tom-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+.kg-tom-card-head {
+  background: linear-gradient(180deg, var(--panel-2) 0%, var(--panel) 100%);
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+.kg-tom-card-color {
+  width: 4px;
+  align-self: stretch;
+  margin: -12px 0 -12px -16px;
+  margin-right: 10px;
+}
+.kg-tom-card-name {
+  font-variant: small-caps;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 16px;
+}
+.kg-trust-gauge {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+.kg-trust-counts {
+  font-variant: tabular-nums; font-size: 11.5px;
+}
+.kg-trust-bar {
+  width: 76px; height: 6px;
+  background: rgba(74,66,52,0.6);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.kg-trust-fill {
+  position: absolute; top: 0; left: 0; height: 100%;
+  background: var(--ok);
+  transition: width 0.3s;
+}
+.kg-trust-fill.low { background: var(--danger); }
+.kg-trust-fill.mid { background: var(--gold); }
+.kg-trust-num {
+  font-variant: tabular-nums;
+  color: var(--ink);
+  font-size: 12px;
+  min-width: 34px; text-align: right;
+}
+.kg-trust-num.unknown { color: var(--ink-faint); font-style: italic; }
+
+.kg-tom-card-body {
+  padding: 10px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kg-tom-section { display: flex; flex-direction: column; gap: 5px; }
+.kg-tom-section-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--ink-faint);
+  font-weight: 600;
+  border-bottom: 1px dotted var(--line);
+  padding-bottom: 3px;
+}
+.kg-tom-line {
+  font-size: 12.5px;
+  color: var(--ink);
+  line-height: 1.45;
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid transparent;
+}
+.kg-tom-line.belief    { border-left-color: #6dab5b; }
+.kg-tom-line.belief.proto { border-left-color: rgba(109,171,91,0.5); opacity: 0.85; }
+.kg-tom-line.prediction { border-left-color: #6f96b5; }
+.kg-tom-line.kept    { border-left-color: var(--ok); }
+.kg-tom-line.broken  { border-left-color: var(--danger); }
+.kg-tom-line.pending { border-left-color: var(--gold); }
+.kg-tom-line.intent  { border-left-color: #8a5b9a; }
+.kg-tom-line .kg-tom-meta {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  font-variant: tabular-nums;
+  margin-top: 1px;
+}
+.kg-tom-empty {
+  color: var(--ink-faint);
+  font-style: italic;
+  font-size: 11.5px;
+  padding-left: 10px;
+}
+.kg-tom-twocol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.kg-tom-twocol .kg-tom-twocol-h {
+  font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--ink-faint);
+  margin-bottom: 3px; font-weight: 600;
+}
+
+/* ── STRUCTURAL LENSES ────────────────────────────────────── */
+.kg-list { display: flex; flex-direction: column; gap: 10px; }
+.kg-list-group {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 12px 16px;
+}
+.kg-list-group-title {
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  font-size: 12px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.kg-record {
+  padding: 7px 0;
+  border-bottom: 1px dotted var(--line);
+  font-size: 13px;
+  color: var(--ink);
+}
+.kg-record:last-child { border-bottom: none; }
+.kg-record-head {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-bottom: 3px;
+}
+.kg-record-tag {
+  font-size: 9.5px; padding: 1.5px 7px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+  flex: 0 0 auto;
+}
+.kg-record-tag.active, .kg-record-tag.confirmed, .kg-record-tag.kept
+  { background: rgba(109,171,91,0.20); color: #b9d6a8; }
+.kg-record-tag.proto, .kg-record-tag.pending
+  { background: rgba(200,163,90,0.18); color: var(--gold-bright); }
+.kg-record-tag.retired { background: rgba(122,111,86,0.20); color: var(--ink-faint); }
+.kg-record-tag.refuted, .kg-record-tag.broken
+  { background: rgba(216,73,43,0.18); color: #e89478; }
+.kg-record-tag.open { background: rgba(111,150,181,0.20); color: #a4c2da; }
+.kg-record-tag.subject { background: rgba(255,255,255,0.05); color: var(--ink-dim); }
+.kg-record-meta {
+  font-size: 11px; color: var(--ink-faint);
+  font-variant: tabular-nums;
+}
+.kg-record-body {
+  font-size: 12px; color: var(--ink-dim);
+  margin-top: 3px; padding-left: 4px;
+  font-style: italic;
+}
+
+/* ── IDENTITY LENS ────────────────────────────────────────── */
+.kg-identity {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 24px 32px;
+  max-width: 720px;
+}
+.kg-identity-archetype {
+  font-variant: small-caps;
+  letter-spacing: 0.14em;
+  color: var(--gold-bright);
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.kg-identity-power {
+  color: var(--ink-dim);
+  font-size: 13px;
+  font-style: italic;
+  margin-bottom: 18px;
+}
+.kg-identity-brief {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+
+/* ── EMPTY/LOADING ────────────────────────────────────────── */
+.kg-empty-state {
+  text-align: center;
+  color: var(--ink-faint);
+  padding: 80px 20px;
+  font-style: italic;
+}
+.kg-empty-state .kg-empty-action {
+  display: inline-block;
+  margin-top: 18px;
+  padding: 8px 22px;
+  background: rgba(200,163,90,0.14);
+  border: 1px solid var(--gold);
+  color: var(--gold-bright);
+  border-radius: 4px;
+  cursor: pointer;
+  font-variant: small-caps;
+  letter-spacing: 0.06em;
+  font-style: normal;
+}
+.kg-empty-state .kg-empty-action:hover { background: rgba(200,163,90,0.26); }
+</style>
+
+
+<div class="kg-overlay" id="kg-overlay">
+  <div class="kg-overlay-head">
+    <div class="kg-overlay-title">Knowledge Inspector</div>
+    <div class="kg-overlay-subtitle" id="kg-overlay-subtitle">— select a power —</div>
+    <button class="kg-overlay-close" onclick="closeKGOverlay()">✕  Close (esc)</button>
+  </div>
+
+  <div class="kg-power-tabs" id="kg-power-tabs"></div>
+
+  <div class="kg-body">
+    <div class="kg-lens-rail">
+      <button class="flagship active" data-lens="tom" onclick="selectKGLens('tom')">
+        Theory of Mind
+        <span class="kg-lens-sub">What this AI thinks of each power</span>
+      </button>
+      <div class="kg-lens-rail-divider"></div>
+      <button data-lens="beliefs" onclick="selectKGLens('beliefs')">
+        Beliefs<span class="kg-lens-sub">Structured claims</span>
+      </button>
+      <button data-lens="predictions" onclick="selectKGLens('predictions')">
+        Predictions<span class="kg-lens-sub">Forecasted moves</span>
+      </button>
+      <button data-lens="commitments" onclick="selectKGLens('commitments')">
+        Commitments<span class="kg-lens-sub">Promises in/out</span>
+      </button>
+      <button data-lens="intents" onclick="selectKGLens('intents')">
+        Intents<span class="kg-lens-sub">Strategic plans</span>
+      </button>
+      <button data-lens="identity" onclick="selectKGLens('identity')">
+        Identity<span class="kg-lens-sub">Character &amp; archetype</span>
+      </button>
+      <div class="kg-lens-rail-divider"></div>
+      <button data-lens="graph" onclick="selectKGLens('graph')">
+        🕸 Graph view<span class="kg-lens-sub">Force-directed map of the mind</span>
+      </button>
+      <button data-lens="dreams" onclick="selectKGLens('dreams')">
+        💭 Dreams<span class="kg-lens-sub">Year-end consolidations &amp; journal</span>
+      </button>
+    </div>
+
+    <div class="kg-content-area" id="kg-content-area">
+      <div class="kg-empty-state">Loading…</div>
+    </div>
+  </div>
+
+  <div class="kg-status-bar">
+    <span id="kg-status-text">No game in progress.</span>
+    <span style="margin-left:auto; display:flex; gap:8px;">
+      <button class="kg-build-btn" onclick="openBiopsyModal()">🔬 Biopsy</button>
+      <button class="kg-build-btn" onclick="openSnapshotBrowser()">📁 Past games</button>
+      <button id="kg-rebuild-btn" class="kg-build-btn" onclick="refreshKGStatusAndMinds()">↻ Refresh</button>
+    </span>
+  </div>
+
+  <!-- ── Snapshot browser modal (opens over the inspector) ── -->
+  <div id="kg-snap-modal" style="
+       display:none; position:absolute; inset:60px;
+       background: var(--panel); border: 1px solid var(--gold);
+       border-radius: 6px; padding: 18px 24px; z-index: 10;
+       overflow-y: auto;">
+    <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px;">
+      <div style="font-variant: small-caps; letter-spacing: 0.1em; color: var(--gold-bright); font-size:16px; font-weight:600;">Past games</div>
+      <span style="color:var(--ink-faint); font-size:12px; font-style:italic;">Auto-saved one snapshot per phase</span>
+      <button class="kg-overlay-close" style="margin-left:auto;" onclick="closeSnapshotBrowser()">✕  Close</button>
+    </div>
+    <div id="kg-snap-list" style="font-size:13px;">Loading…</div>
+  </div>
+</div>
+
+<!-- ── Biopsy modal — STANDALONE, lives outside the inspector overlay
+     so it can be opened directly from per-power 🔬 buttons ── -->
+<div id="kg-biopsy-modal" style="
+     display:none; position:fixed; inset:40px; z-index: 1100;
+     background: var(--panel); border: 1px solid var(--gold);
+     border-radius: 6px; padding: 16px 20px;
+     overflow:hidden; flex-direction: column;">
+  <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px; flex: 0 0 auto; flex-wrap:wrap;">
+    <div style="font-variant: small-caps; letter-spacing: 0.1em; color: var(--gold-bright); font-size:16px; font-weight:600;">🔬 Biopsy</div>
+    <span style="color:var(--ink-faint); font-size:12px; font-style:italic;">Raw prompts and responses — what the LLM actually saw</span>
+    <select id="biopsy-power-pick" onchange="loadBiopsyForPower()" style="background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 4px 8px; border-radius: 3px; font-size:12px;">
+      <option value="">(pick a power)</option>
+    </select>
+    <button class="kg-build-btn" onclick="downloadBiopsyAll()" title="Download all prompts/responses as JSON">⬇ Download JSON</button>
+    <button class="kg-overlay-close" style="margin-left:auto;" onclick="closeBiopsyModal()">✕  Close (esc)</button>
+  </div>
+  <div id="biopsy-summary" style="font-size:11.5px; color:var(--ink-dim); margin-bottom:10px; flex: 0 0 auto;"></div>
+  <div id="biopsy-list" style="font-size:12px; flex: 1 1 auto; overflow-y: auto;">Pick a power above.</div>
+</div>
+
+
+<script>
+// ============================================================
+// KG INSPECTOR — uses /api/substrate/* (observer reconstruction)
+// Reuses existing helpers: api(), POWERS, STATE
+// ============================================================
+
+const KG = {
+  open: false,
+  selected_power: null,
+  selected_lens: "tom",
+  minds: {},
+  status: null,
+  building: false,
+};
+
+function openKGOverlay() {
+  if (KG.open) return;
+  KG.open = true;
+  document.getElementById("kg-overlay").classList.add("open");
+  buildKGPowerTabs();
+  refreshKGStatusAndMinds();
+  document.addEventListener("keydown", _kgEsc);
+}
+function closeKGOverlay() {
+  KG.open = false;
+  document.getElementById("kg-overlay").classList.remove("open");
+  document.removeEventListener("keydown", _kgEsc);
+}
+function _kgEsc(e) { if (e.key === "Escape") closeKGOverlay(); }
+
+function buildKGPowerTabs() {
+  const host = document.getElementById("kg-power-tabs");
+  host.innerHTML = "";
+  const userPower = (typeof STATE !== "undefined" && STATE && STATE.board)
+                    ? STATE.board.user_power : null;
+  for (const p of POWERS) {
+    if (p === userPower) continue;
+    const arch = (KG.minds[p] && KG.minds[p].archetype) || "—";
+    const btn = document.createElement("button");
+    btn.dataset.power = p;
+    btn.innerHTML = `
+      <span class="kg-power-color" style="background: var(--c-${p})"></span>${p}
+      <span class="kg-power-archetype">${kgEscape(arch)}</span>
+    `;
+    btn.onclick = () => selectKGPower(p);
+    host.appendChild(btn);
+  }
+  if (!KG.selected_power || KG.selected_power === userPower) {
+    const first = host.querySelector("button");
+    if (first) selectKGPower(first.dataset.power);
+  } else {
+    selectKGPower(KG.selected_power);
+  }
+}
+
+function selectKGPower(p) {
+  KG.selected_power = p;
+  document.querySelectorAll("#kg-power-tabs button").forEach(b =>
+    b.classList.toggle("active", b.dataset.power === p));
+  const m = KG.minds[p];
+  document.getElementById("kg-overlay-subtitle").textContent =
+    m ? `${p} · ${m.archetype || "?"}${m.phase ? " · " + m.phase : ""}` : p;
+  renderKGLens();
+}
+
+function selectKGLens(lens) {
+  KG.selected_lens = lens;
+  document.querySelectorAll(".kg-lens-rail button").forEach(b =>
+    b.classList.toggle("active", b.dataset.lens === lens));
+  renderKGLens();
+}
+
+async function refreshKGStatusAndMinds() {
+  try {
+    const r = await fetch("/api/substrate/all");
+    if (!r.ok) throw new Error("status " + r.status);
+    const all = await r.json();
+    KG.status = all.status || null;
+    KG.minds = all.minds || {};
+    updateKGStatusBar();
+    buildKGPowerTabs();
+  } catch (e) {
+    setKGStatus(`error: ${e.message || e}`);
+  }
+}
+
+function updateKGStatusBar() {
+  const s = KG.status;
+  let txt;
+  if (!s) {
+    txt = "No status.";
+  } else if (s.state === "building") {
+    txt = `Building substrate (${s.completed_powers || 0}/5 powers)…`;
+    KG.building = true;
+  } else if (s.last_built_at) {
+    const dt = new Date(s.last_built_at * 1000);
+    txt = `Last built ${dt.toLocaleTimeString()} for phase ${s.last_built_phase || "?"}`;
+    KG.building = false;
+  } else {
+    txt = "No substrate built yet — click Build / Refresh.";
+    KG.building = false;
+  }
+  document.getElementById("kg-status-text").textContent = txt;
+  const btn = document.getElementById("kg-rebuild-btn");
+  btn.disabled = KG.building;
+  btn.textContent = KG.building ? "Building…" : "Build / Refresh";
+}
+
+function setKGStatus(text) {
+  document.getElementById("kg-status-text").textContent = text;
+}
+
+async function rebuildKGSubstrate() {
+  if (KG.building) return;
+  setKGStatus("Triggering build…");
+  try {
+    const modelSel = document.getElementById("sub-model-pick");
+    const model = modelSel ? modelSel.value : "claude-haiku-4-5-20251001";
+    await fetch("/api/substrate/build", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({model})
+    });
+    KG.building = true;
+    updateKGStatusBar();
+    const poll = async () => {
+      const r = await fetch("/api/substrate/status");
+      KG.status = await r.json();
+      updateKGStatusBar();
+      if (KG.status.state === "building") {
+        setTimeout(poll, 1500);
+      } else {
+        const all = await fetch("/api/substrate/all").then(r => r.json());
+        KG.minds = all.minds || {};
+        buildKGPowerTabs();
+        renderKGLens();
+      }
+    };
+    setTimeout(poll, 800);
+  } catch (e) {
+    setKGStatus(`build error: ${e.message || e}`);
+  }
+}
+
+// ── Lens dispatcher ─────────────────────────────────────────
+function renderKGLens() {
+  const area = document.getElementById("kg-content-area");
+  area.innerHTML = "";
+  const power = KG.selected_power;
+  if (!power) {
+    area.innerHTML = `<div class="kg-empty-state">Pick a power above.</div>`;
+    return;
+  }
+  const mind = KG.minds[power];
+  if (!mind) {
+    const div = document.createElement("div");
+    div.className = "kg-empty-state";
+    div.innerHTML = `
+      <div>No substrate built for <strong>${power}</strong> yet.</div>
+      <div style="margin-top:6px; font-size:12px;">
+        The substrate observer reconstructs each AI's mind from the message log.
+      </div>
+      <button class="kg-empty-action" onclick="rebuildKGSubstrate()">Build now</button>
+    `;
+    area.appendChild(div);
+    return;
+  }
+  switch (KG.selected_lens) {
+    case "tom":         renderKGToM(area, mind); break;
+    case "beliefs":     renderKGBeliefs(area, mind); break;
+    case "predictions": renderKGPredictions(area, mind); break;
+    case "commitments": renderKGCommitments(area, mind); break;
+    case "intents":     renderKGIntents(area, mind); break;
+    case "identity":    renderKGIdentity(area, mind); break;
+    case "graph":       renderKGGraph(area, mind); break;
+    case "dreams":      renderKGDreams(area, mind); break;
+  }
+}
+
+// ── ToM lens — flagship ─────────────────────────────────────
+function renderKGToM(area, mind) {
+  const targets = POWERS.filter(p => p !== mind.owner_power);
+  const beliefsByT = {}, predsByT = {}, incomingByT = {}, selfByT = {}, intentsByT = {};
+  for (const t of targets) {
+    beliefsByT[t] = []; predsByT[t] = [];
+    incomingByT[t] = []; selfByT[t] = []; intentsByT[t] = [];
+  }
+  (mind.beliefs || []).forEach(b => {
+    if (b.about_power && beliefsByT[b.about_power]) beliefsByT[b.about_power].push(b);
+  });
+  (mind.recent_predictions || []).forEach(p => {
+    if (p.about_power && predsByT[p.about_power]) predsByT[p.about_power].push(p);
+  });
+  (mind.incoming_commitments || []).forEach(c => {
+    if (c.speaker && incomingByT[c.speaker]) incomingByT[c.speaker].push(c);
+  });
+  (mind.self_commitments || []).forEach(c => {
+    const tgt = c.target_power || (Array.isArray(c.addressees) ? c.addressees[0] : null);
+    if (tgt && selfByT[tgt]) selfByT[tgt].push(c);
+  });
+  (mind.strategic_intents || []).forEach(i => {
+    (i.target_powers || []).forEach(tp => {
+      if (intentsByT[tp]) intentsByT[tp].push(i);
+    });
+  });
+
+  const grid = document.createElement("div");
+  grid.className = "kg-tom-grid";
+  for (const t of targets) {
+    const fromThem = incomingByT[t];
+    const kept = fromThem.filter(c => c.status === "kept").length;
+    const broken = fromThem.filter(c => c.status === "broken").length;
+    const pending = fromThem.filter(c => c.status === "pending").length;
+    const resolved = kept + broken;
+    const trust = resolved > 0 ? kept / resolved : null;
+    const trustClass = trust === null ? "" : trust < 0.4 ? "low" : trust < 0.7 ? "mid" : "";
+    const trustHTML = trust === null
+      ? `<span class="kg-trust-num unknown">—</span>`
+      : `<div class="kg-trust-bar"><div class="kg-trust-fill ${trustClass}"
+            style="width: ${Math.round(trust*100)}%"></div></div>
+         <span class="kg-trust-num">${Math.round(trust*100)}%</span>`;
+
+    const card = document.createElement("div");
+    card.className = "kg-tom-card";
+    card.innerHTML = `
+      <div class="kg-tom-card-head">
+        <div class="kg-tom-card-color" style="background: var(--c-${t})"></div>
+        <div class="kg-tom-card-name">${t}</div>
+        <div class="kg-trust-gauge">
+          <span class="kg-trust-counts" title="Promise ledger">${kept}✓ ${broken}✗ ${pending}…</span>
+          ${trustHTML}
+        </div>
+      </div>
+      <div class="kg-tom-card-body"></div>
+    `;
+    const body = card.querySelector(".kg-tom-card-body");
+    body.appendChild(_kgToMSection("Beliefs",
+      beliefsByT[t].sort((a,b)=>(b.hp||0)-(a.hp||0)).slice(0,3).map(_kgToMBeliefLine)));
+    body.appendChild(_kgToMSection("Predictions about them",
+      predsByT[t].sort((a,b)=>(b.confidence||0)-(a.confidence||0)).slice(0,2).map(_kgToMPredictionLine)));
+
+    // Promise ledger — two-column
+    const ledger = document.createElement("div");
+    ledger.className = "kg-tom-section";
+    ledger.innerHTML = `<div class="kg-tom-section-title">Promise ledger</div>`;
+    const tcol = document.createElement("div");
+    tcol.className = "kg-tom-twocol";
+    const fc = document.createElement("div"); fc.innerHTML = `<div class="kg-tom-twocol-h">From them</div>`;
+    const mc = document.createElement("div"); mc.innerHTML = `<div class="kg-tom-twocol-h">From me</div>`;
+    if (fromThem.length === 0) fc.appendChild(_kgEmpty("(none)"));
+    else fromThem.slice(-3).reverse().forEach(c => fc.appendChild(_kgToMCommitLine(c)));
+    if (selfByT[t].length === 0) mc.appendChild(_kgEmpty("(none)"));
+    else selfByT[t].slice(-3).reverse().forEach(c => mc.appendChild(_kgToMCommitLine(c)));
+    tcol.appendChild(fc); tcol.appendChild(mc);
+    ledger.appendChild(tcol);
+    body.appendChild(ledger);
+
+    body.appendChild(_kgToMSection("My intents toward them",
+      intentsByT[t].slice(0,2).map(_kgToMIntentLine)));
+    grid.appendChild(card);
+  }
+  area.appendChild(grid);
+}
+
+function _kgToMSection(title, lineEls) {
+  const s = document.createElement("div");
+  s.className = "kg-tom-section";
+  s.innerHTML = `<div class="kg-tom-section-title">${title}</div>`;
+  if (!lineEls || lineEls.length === 0) s.appendChild(_kgEmpty("(none yet)"));
+  else lineEls.forEach(l => s.appendChild(l));
+  return s;
+}
+function _kgEmpty(txt) {
+  const d = document.createElement("div");
+  d.className = "kg-tom-empty";
+  d.textContent = txt;
+  return d;
+}
+function _kgToMBeliefLine(b) {
+  const d = document.createElement("div");
+  d.className = "kg-tom-line belief" + (b.status === "proto" ? " proto" : "");
+  const meta = [b.belief_type, b.status, b.hp != null ? `hp=${(+b.hp).toFixed(1)}` : ""]
+               .filter(Boolean).join(" · ");
+  d.innerHTML = `${kgEscape(b.head || "")}<div class="kg-tom-meta">${kgEscape(meta)}</div>`;
+  return d;
+}
+function _kgToMPredictionLine(p) {
+  const d = document.createElement("div");
+  d.className = "kg-tom-line prediction";
+  const conf = p.confidence != null ? `${Math.round(p.confidence*100)}%` : "?";
+  const target = p.predicted_target || p.target || "?";
+  const event = p.predicted_event_type || p.type || "event";
+  const status = (p.status || "open").toUpperCase();
+  d.innerHTML = `${kgEscape(event)} → <strong>${kgEscape(target)}</strong>
+    <div class="kg-tom-meta">${conf} · ${status} · ${kgEscape(p.rationale || "")}</div>`;
+  return d;
+}
+function _kgToMCommitLine(c) {
+  const d = document.createElement("div");
+  const status = c.status || "pending";
+  d.className = "kg-tom-line " + status;
+  const subj = c.subject_province || c.target_province || c.counterparty || "";
+  const head = `${c.type || "?"}${subj ? " " + subj : ""}`;
+  const meta = [status.toUpperCase(),
+    c.deadline_phase ? `due ${c.deadline_phase}` : ""].filter(Boolean).join(" · ");
+  d.innerHTML = `${kgEscape(head)}<div class="kg-tom-meta">${kgEscape(meta)}</div>`;
+  return d;
+}
+function _kgToMIntentLine(i) {
+  const d = document.createElement("div");
+  d.className = "kg-tom-line intent";
+  const meta = [i.status,
+    i.hp != null ? `hp=${(+i.hp).toFixed(1)}` : "",
+    i.horizon ? `→${i.horizon}` : ""].filter(Boolean).join(" · ");
+  d.innerHTML = `${kgEscape(i.head || "")}<div class="kg-tom-meta">${kgEscape(meta)}</div>`;
+  return d;
+}
+
+// ── Beliefs lens ────────────────────────────────────────────
+function renderKGBeliefs(area, mind) {
+  const beliefs = mind.beliefs || [];
+  if (!beliefs.length) {
+    area.innerHTML = `<div class="kg-empty-state">No beliefs yet.</div>`; return;
+  }
+  const groups = {};
+  for (const b of beliefs) (groups[b.about_power || "(no target)"] = groups[b.about_power || "(no target)"] || []).push(b);
+  const list = document.createElement("div"); list.className = "kg-list";
+  for (const [pwr, items] of Object.entries(groups)) {
+    items.sort((a,b)=>(b.hp||0)-(a.hp||0));
+    const g = document.createElement("div"); g.className = "kg-list-group";
+    g.innerHTML = `<div class="kg-list-group-title">About ${pwr} (${items.length})</div>`;
+    items.forEach(b => g.appendChild(_kgBeliefRecord(b)));
+    list.appendChild(g);
+  }
+  area.appendChild(list);
+}
+function _kgBeliefRecord(b) {
+  const d = document.createElement("div"); d.className = "kg-record";
+  const tag = `<span class="kg-record-tag ${b.status||'active'}">${(b.status||'active').toUpperCase()}</span>`;
+  const tag2 = b.belief_type ? `<span class="kg-record-tag subject">${kgEscape(b.belief_type.toUpperCase())}</span>` : "";
+  const meta = [
+    b.hp != null ? `hp=${(+b.hp).toFixed(2)}` : "",
+    `✓${(b.evidence_for||[]).length}/✗${(b.evidence_against||[]).length}`,
+    b.formed_at_phase ? `formed ${b.formed_at_phase}` : "",
+  ].filter(Boolean).join(" · ");
+  d.innerHTML = `<div class="kg-record-head">${tag} ${tag2}
+    <div style="flex:1;color:var(--ink);">${kgEscape(b.head || "")}</div>
+    <div class="kg-record-meta">${kgEscape(meta)}</div></div>
+    ${b.body ? `<div class="kg-record-body">${kgEscape(b.body)}</div>` : ""}`;
+  return d;
+}
+
+// ── Predictions lens ────────────────────────────────────────
+function renderKGPredictions(area, mind) {
+  const preds = mind.recent_predictions || [];
+  if (!preds.length) {
+    area.innerHTML = `<div class="kg-empty-state">No predictions yet.</div>`; return;
+  }
+  const groups = {};
+  for (const p of preds) (groups[p.status||"open"] = groups[p.status||"open"] || []).push(p);
+  const list = document.createElement("div"); list.className = "kg-list";
+  for (const status of ["open","confirmed","refuted","partial"]) {
+    if (!(groups[status] || []).length) continue;
+    groups[status].sort((a,b)=>(b.confidence||0)-(a.confidence||0));
+    const g = document.createElement("div"); g.className = "kg-list-group";
+    g.innerHTML = `<div class="kg-list-group-title">${status.toUpperCase()} (${groups[status].length})</div>`;
+    groups[status].forEach(p => g.appendChild(_kgPredRecord(p)));
+    list.appendChild(g);
+  }
+  area.appendChild(list);
+}
+function _kgPredRecord(p) {
+  const d = document.createElement("div"); d.className = "kg-record";
+  const status = p.status||"open";
+  const tag = `<span class="kg-record-tag ${status}">${status.toUpperCase()}</span>`;
+  const conf = p.confidence != null ? `${Math.round(p.confidence*100)}%` : "?";
+  const event = p.predicted_event_type || "?";
+  const target = p.predicted_target || "?";
+  const meta = [conf, p.prediction_window || "", p.about_power || ""].filter(Boolean).join(" · ");
+  d.innerHTML = `<div class="kg-record-head">${tag}
+    <div style="flex:1">${kgEscape(event)} → <strong>${kgEscape(target)}</strong>
+      <span class="muted tiny" style="margin-left:8px">about ${kgEscape(p.about_power||"?")}</span></div>
+    <div class="kg-record-meta">${kgEscape(meta)}</div></div>
+    ${p.rationale ? `<div class="kg-record-body">${kgEscape(p.rationale)}</div>` : ""}`;
+  return d;
+}
+
+// ── Commitments lens ────────────────────────────────────────
+function renderKGCommitments(area, mind) {
+  const inc = mind.incoming_commitments || [];
+  const sf = mind.self_commitments || [];
+  if (!inc.length && !sf.length) {
+    area.innerHTML = `<div class="kg-empty-state">No commitments yet.</div>`; return;
+  }
+  const list = document.createElement("div"); list.className = "kg-list";
+  if (inc.length) {
+    const g = document.createElement("div"); g.className = "kg-list-group";
+    g.innerHTML = `<div class="kg-list-group-title">Incoming — promises others made (${inc.length})</div>`;
+    inc.forEach(c => g.appendChild(_kgCommitRecord(c, false)));
+    list.appendChild(g);
+  }
+  if (sf.length) {
+    const g = document.createElement("div"); g.className = "kg-list-group";
+    g.innerHTML = `<div class="kg-list-group-title">Outgoing — promises this AI made (${sf.length})</div>`;
+    sf.forEach(c => g.appendChild(_kgCommitRecord(c, true)));
+    list.appendChild(g);
+  }
+  area.appendChild(list);
+}
+function _kgCommitRecord(c, isSelf) {
+  const d = document.createElement("div"); d.className = "kg-record";
+  const status = c.status || "pending";
+  const tag = `<span class="kg-record-tag ${status}">${status.toUpperCase()}</span>`;
+  const subj = c.subject_province || c.target_province || c.counterparty || "";
+  const head = `${c.type || "?"}${subj ? " " + subj : ""}`;
+  const party = isSelf
+    ? `to ${c.target_power || (c.addressees||[]).join(",")}`
+    : `from ${c.speaker}`;
+  const meta = [c.deadline_phase ? `due ${c.deadline_phase}` : "",
+                c.resolved_at_phase ? `resolved ${c.resolved_at_phase}` : ""]
+               .filter(Boolean).join(" · ");
+  d.innerHTML = `<div class="kg-record-head">${tag}
+    <div style="flex:1">${kgEscape(head)}<span class="muted tiny" style="margin-left:8px">${kgEscape(party)}</span></div>
+    <div class="kg-record-meta">${kgEscape(meta)}</div></div>`;
+  return d;
+}
+
+// ── Intents lens ────────────────────────────────────────────
+function renderKGIntents(area, mind) {
+  const its = mind.strategic_intents || [];
+  if (!its.length) {
+    area.innerHTML = `<div class="kg-empty-state">No strategic intents yet.</div>`; return;
+  }
+  const groups = {};
+  for (const i of its) (groups[i.status||"active"] = groups[i.status||"active"] || []).push(i);
+  const list = document.createElement("div"); list.className = "kg-list";
+  for (const [status, items] of Object.entries(groups)) {
+    items.sort((a,b)=>(b.hp||0)-(a.hp||0));
+    const g = document.createElement("div"); g.className = "kg-list-group";
+    g.innerHTML = `<div class="kg-list-group-title">${status.toUpperCase()} (${items.length})</div>`;
+    items.forEach(i => g.appendChild(_kgIntentRecord(i)));
+    list.appendChild(g);
+  }
+  area.appendChild(list);
+}
+function _kgIntentRecord(i) {
+  const d = document.createElement("div"); d.className = "kg-record";
+  const tag = `<span class="kg-record-tag ${i.status||'active'}">${(i.status||'active').toUpperCase()}</span>`;
+  const targets = (i.target_powers || []).join(", ") || "—";
+  const meta = [
+    i.hp != null ? `hp=${(+i.hp).toFixed(2)}` : "",
+    i.horizon ? `horizon ${i.horizon}` : ""
+  ].filter(Boolean).join(" · ");
+  d.innerHTML = `<div class="kg-record-head">${tag}
+    <div style="flex:1">${kgEscape(i.head || "(no head)")}
+      <span class="muted tiny">→ ${kgEscape(targets)}</span></div>
+    <div class="kg-record-meta">${kgEscape(meta)}</div></div>
+    ${i.body ? `<div class="kg-record-body">${kgEscape(i.body)}</div>` : ""}`;
+  return d;
+}
+
+// ── Identity lens ───────────────────────────────────────────
+function renderKGIdentity(area, mind) {
+  const d = document.createElement("div");
+  d.className = "kg-identity";
+  d.innerHTML = `
+    <div class="kg-identity-archetype">${kgEscape(mind.archetype || "—")}</div>
+    <div class="kg-identity-power">Plays as ${kgEscape(mind.owner_power || "?")} · Phase ${kgEscape(mind.phase || "?")}</div>
+    <div class="kg-identity-brief">${kgEscape(mind.summary ||
+      "(no character brief — the substrate observer reconstructs from messages)")}</div>
+  `;
+  area.appendChild(d);
+}
+
+// ── Graph lens — full KG force-directed map ─────────────────────────
+//
+// Renders one agent's mind as a force-directed graph:
+//   • 6 power nodes (owner highlighted, pinned in a hex)
+//   • One node per belief, prediction, commitment (incoming + self),
+//     strategic intent, and suspicion
+//   • Edges connect each KG node to the relevant power(s)
+//   • Power-power trust edges (kept/broken counts) drawn underneath
+//
+// Click any node → side panel detail. Filters at top toggle visibility.
+
+const KG_GRAPH_FILTERS = {
+  beliefs: true, predictions: true,
+  commitments: true, intents: true, suspicions: true,
+};
+
+function renderKGGraph(area, mind) {
+  const owner = mind.owner_power;
+  const otherPowers = POWERS.filter(p => p !== owner);
+
+  // ---- power-power trust (for the underlying edges) ----
+  const trustByTarget = {};
+  for (const t of otherPowers) {
+    const incoming = (mind.incoming_commitments || []).filter(c => c.speaker === t);
+    const kept = incoming.filter(c => c.status === "kept").length;
+    const broken = incoming.filter(c => c.status === "broken").length;
+    const pending = incoming.filter(c => c.status === "pending").length;
+    trustByTarget[t] = {
+      kept, broken, pending,
+      resolved: kept + broken,
+      trust: (kept + broken) > 0 ? kept / (kept + broken) : null,
+    };
+  }
+
+  // ---- build nodes ----
+  const W = 720, H = 560;
+  const cx = W / 2, cy = H / 2;
+  const ringR = 220;
+  const nodes = [];
+  const nodeById = {};
+  function addNode(n) { nodes.push(n); nodeById[n.id] = n; return n; }
+
+  // Powers — pinned at hex positions
+  addNode({id: `pow:${owner}`, kind: "power", power: owner, label: owner,
+           is_owner: true, x: cx, y: cy, r: 30});
+  otherPowers.forEach((p, i) => {
+    const a = (i / otherPowers.length) * 2 * Math.PI - Math.PI / 2;
+    addNode({id: `pow:${p}`, kind: "power", power: p, label: p,
+             is_owner: false,
+             x: cx + Math.cos(a) * ringR, y: cy + Math.sin(a) * ringR, r: 22});
+  });
+
+  // Beliefs
+  if (KG_GRAPH_FILTERS.beliefs) {
+    for (const b of (mind.beliefs || [])) {
+      addNode({
+        id: `bel:${b.id}`, kind: "belief",
+        about: b.about_power, status: b.status, hp: b.hp || 1,
+        belief_type: b.belief_type,
+        label: (b.head || "").slice(0, 36) + ((b.head || "").length > 36 ? "…" : ""),
+        raw: b, r: 7,
+      });
+    }
+  }
+  // Predictions (recent_predictions is the renamed key in the substrate route)
+  if (KG_GRAPH_FILTERS.predictions) {
+    for (const p of (mind.recent_predictions || mind.predictions || [])) {
+      addNode({
+        id: `pred:${p.id}`, kind: "prediction",
+        about: p.about_power, status: p.status,
+        label: `${p.predicted_event_type || ""}→${p.predicted_target || "?"}`,
+        raw: p, r: 5,
+      });
+    }
+  }
+  // Commitments (incoming and self)
+  if (KG_GRAPH_FILTERS.commitments) {
+    for (const c of (mind.incoming_commitments || [])) {
+      addNode({
+        id: `inc:${c.id}`, kind: "incoming_commit",
+        from: c.speaker, status: c.status,
+        label: `${c.type || ""} ${c.target_province || c.subject_province || ""}`,
+        raw: c, r: 5,
+      });
+    }
+    for (const c of (mind.self_commitments || [])) {
+      const tgt = c.target_power || (c.addressees || [])[0] || null;
+      addNode({
+        id: `self:${c.id}`, kind: "self_commit",
+        to: tgt, status: c.status,
+        label: `${c.type || ""} ${c.target_province || c.subject_province || ""}`,
+        raw: c, r: 5,
+      });
+    }
+  }
+  // Intents
+  if (KG_GRAPH_FILTERS.intents) {
+    for (const i of (mind.strategic_intents || [])) {
+      addNode({
+        id: `int:${i.id}`, kind: "intent",
+        targets: i.target_powers || [], status: i.status,
+        label: (i.head || "").slice(0, 30) + ((i.head || "").length > 30 ? "…" : ""),
+        raw: i, r: 8,
+      });
+    }
+  }
+  // Suspicions (lightweight, attached to about_power)
+  if (KG_GRAPH_FILTERS.suspicions) {
+    for (const [idx, s] of (mind.suspicions || []).entries()) {
+      addNode({
+        id: `sus:${idx}`, kind: "suspicion",
+        about: s.about_power, weight: s.weight || 0.5,
+        label: (s.tag || s.note || "").slice(0, 28),
+        raw: s, r: 4,
+      });
+    }
+  }
+
+  // ---- build links ----
+  const links = [];
+  for (const n of nodes) {
+    if (n.kind === "belief" && n.about && nodeById[`pow:${n.about}`]) {
+      links.push({source: n.id, target: `pow:${n.about}`, kind: "belief_about"});
+    }
+    if (n.kind === "prediction" && n.about && nodeById[`pow:${n.about}`]) {
+      links.push({source: n.id, target: `pow:${n.about}`, kind: "pred_about"});
+    }
+    if (n.kind === "incoming_commit" && n.from && nodeById[`pow:${n.from}`]) {
+      links.push({source: `pow:${n.from}`, target: n.id, kind: "speaks", status: n.status});
+    }
+    if (n.kind === "self_commit" && n.to && nodeById[`pow:${n.to}`]) {
+      links.push({source: `pow:${owner}`, target: n.id, kind: "promised", status: n.status});
+      links.push({source: n.id, target: `pow:${n.to}`, kind: "to", status: n.status});
+    }
+    if (n.kind === "intent") {
+      links.push({source: `pow:${owner}`, target: n.id, kind: "intent_owner"});
+      for (const tp of (n.targets || [])) {
+        if (nodeById[`pow:${tp}`]) {
+          links.push({source: n.id, target: `pow:${tp}`, kind: "intent_target"});
+        }
+      }
+    }
+    if (n.kind === "suspicion" && n.about && nodeById[`pow:${n.about}`]) {
+      links.push({source: n.id, target: `pow:${n.about}`, kind: "suspicion_about"});
+    }
+  }
+
+  // ---- DOM scaffolding (filters + svg + detail panel side-by-side) ----
+  area.innerHTML = `
+    <div style="margin-bottom:8px; display:flex; gap:14px; flex-wrap:wrap; align-items:center; font-size:11px; color:var(--ink-dim);">
+      <strong style="color:var(--ink);">${owner}</strong> at center · drag any node · click for details
+      <span style="margin-left:auto; display:flex; gap:10px;">
+        ${["beliefs","predictions","commitments","intents","suspicions"].map(k => `
+          <label style="cursor:pointer;">
+            <input type="checkbox" ${KG_GRAPH_FILTERS[k] ? "checked" : ""}
+                   onchange="KG_GRAPH_FILTERS['${k}']=this.checked; renderKGLens();" />
+            ${k}
+          </label>
+        `).join("")}
+      </span>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <svg id="kg-graph-svg" width="${W}" height="${H}"
+           style="background:rgba(0,0,0,0.18); border:1px solid var(--line); border-radius:6px; flex: 0 0 ${W}px;"></svg>
+      <div id="kg-graph-detail" style="flex:1; font-size:11px; color:var(--ink-dim); overflow-y:auto; max-height:${H}px; padding:6px 4px;">
+        <div style="color:var(--ink-faint); font-style:italic;">Click any node to see details. ${nodes.length} nodes, ${links.length} edges.</div>
+      </div>
+    </div>
+  `;
+  const svg = d3.select("#kg-graph-svg");
+
+  // Power-power trust edges (drawn first, so they sit underneath)
+  const trustG = svg.append("g").attr("class", "trust-edges");
+  for (const t of otherPowers) {
+    const data = trustByTarget[t];
+    if (data.kept + data.broken + data.pending === 0) continue;
+    const op = nodeById[`pow:${owner}`], tp = nodeById[`pow:${t}`];
+    let color, opacity;
+    if (data.resolved === 0) { color = "#c8a35a"; opacity = 0.35; }
+    else if (data.trust >= 0.7) { color = "#6dab5b"; opacity = 0.7; }
+    else if (data.trust >= 0.4) { color = "#c8a35a"; opacity = 0.7; }
+    else { color = "#d8492b"; opacity = 0.85; }
+    const w = Math.min(8, 1 + data.kept * 1.5 + data.broken * 1.5 + data.pending * 0.4);
+    trustG.append("line")
+      .attr("x1", op.x).attr("y1", op.y)
+      .attr("x2", tp.x).attr("y2", tp.y)
+      .attr("stroke", color).attr("stroke-width", w)
+      .attr("stroke-opacity", opacity);
+    trustG.append("text")
+      .attr("x", (op.x + tp.x) / 2).attr("y", (op.y + tp.y) / 2 - 4)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "10px").attr("font-family", "ui-monospace, Menlo, monospace")
+      .attr("fill", "var(--ink)")
+      .text(`${data.kept}✓${data.broken}✗${data.pending}…`);
+  }
+
+  // Link layer
+  const linkSel = svg.append("g").attr("class", "links")
+    .selectAll("line").data(links).enter().append("line")
+    .attr("stroke", linkColor)
+    .attr("stroke-width", linkWidth)
+    .attr("stroke-opacity", 0.55)
+    .attr("stroke-dasharray", l => l.kind === "intent_target" ? "3 3" : null);
+
+  // Node layer
+  const nodeSel = svg.append("g").attr("class", "nodes")
+    .selectAll("g").data(nodes).enter().append("g")
+    .attr("class", d => "node node-" + d.kind)
+    .style("cursor", "pointer")
+    .on("click", (ev, d) => showGraphDetail(d, mind))
+    .call(d3.drag()
+      .on("start", (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart();
+                                d.fx = d.x; d.fy = d.y; })
+      .on("drag",  (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+      .on("end",   (ev, d) => { if (!ev.active) sim.alphaTarget(0);
+                                if (d.kind !== "power") { d.fx = null; d.fy = null; } }));
+
+  nodeSel.each(function(d) {
+    const g = d3.select(this);
+    if (d.kind === "power") {
+      g.append("circle").attr("r", d.r)
+       .attr("fill", `var(--c-${d.power})`)
+       .attr("stroke", d.is_owner ? "var(--gold-bright)" : "var(--gold)")
+       .attr("stroke-width", d.is_owner ? 3 : 1.5);
+      g.append("text").attr("text-anchor", "middle").attr("dominant-baseline", "middle")
+       .attr("font-family", "Iowan Old Style, Palatino, serif")
+       .attr("font-size", d.is_owner ? "13px" : "11px")
+       .attr("font-weight", "bold").attr("fill", "#000")
+       .text(d.label);
+    } else if (d.kind === "intent") {
+      g.append("polygon")
+       .attr("points", hexPoints(d.r))
+       .attr("fill", statusFill(d.status))
+       .attr("stroke", "var(--ink-dim)").attr("stroke-width", 0.8);
+    } else if (d.kind === "belief") {
+      g.append("polygon")
+       .attr("points", `0,-${d.r} ${d.r},${d.r * 0.85} -${d.r},${d.r * 0.85}`)
+       .attr("fill", statusFill(d.status))
+       .attr("stroke", "var(--ink-dim)").attr("stroke-width", 0.6);
+    } else if (d.kind === "prediction") {
+      g.append("polygon")
+       .attr("points", `0,-${d.r} ${d.r},0 0,${d.r} -${d.r},0`)
+       .attr("fill", statusFill(d.status))
+       .attr("stroke", "var(--ink-dim)").attr("stroke-width", 0.6);
+    } else if (d.kind === "incoming_commit" || d.kind === "self_commit") {
+      g.append("rect").attr("x", -d.r).attr("y", -d.r)
+       .attr("width", d.r * 2).attr("height", d.r * 2)
+       .attr("fill", statusFill(d.status))
+       .attr("stroke", "var(--ink-dim)").attr("stroke-width", 0.6)
+       .attr("rx", d.kind === "self_commit" ? 1 : 0);
+    } else if (d.kind === "suspicion") {
+      g.append("circle").attr("r", d.r)
+       .attr("fill", "transparent")
+       .attr("stroke", "#c8a35a")
+       .attr("stroke-width", 1.5)
+       .attr("opacity", 0.4 + 0.6 * (d.weight || 0.5));
+    }
+  });
+
+  nodeSel.append("title").text(d => `${d.kind}: ${d.label}`);
+
+  // Force simulation
+  const sim = d3.forceSimulation(nodes)
+    .force("link", d3.forceLink(links).id(d => d.id).distance(l => {
+      if (l.kind === "intent_owner" || l.kind === "speaks" || l.kind === "promised") return 50;
+      return 70;
+    }).strength(0.3))
+    .force("charge", d3.forceManyBody().strength(d => d.kind === "power" ? -400 : -50))
+    .force("center", d3.forceCenter(cx, cy).strength(0.05))
+    .force("collide", d3.forceCollide().radius(d => (d.r || 5) + 2));
+
+  // Pin powers to their hex positions
+  nodes.filter(n => n.kind === "power").forEach(n => {
+    n.fx = n.x; n.fy = n.y;
+  });
+
+  sim.on("tick", () => {
+    linkSel
+      .attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+    nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
+  });
+}
+
+function linkColor(l) {
+  if (l.status === "kept" || l.status === "confirmed") return "#6dab5b";
+  if (l.status === "broken" || l.status === "refuted") return "#d8492b";
+  if (l.status === "pending" || l.status === "open")   return "#c8a35a";
+  if (l.kind === "intent_target")                       return "#7e6cd6";
+  return "var(--line)";
+}
+
+function linkWidth(l) {
+  if (l.kind === "speaks" || l.kind === "to" || l.kind === "promised") return 1.5;
+  if (l.kind === "intent_owner" || l.kind === "intent_target")          return 1.2;
+  return 0.8;
+}
+
+function statusFill(status) {
+  if (status === "active" || status === "kept" || status === "confirmed" || status === "succeeded") return "#6dab5b";
+  if (status === "broken" || status === "refuted" || status === "failed") return "#d8492b";
+  if (status === "pending" || status === "open" || status === "proto") return "#c8a35a";
+  if (status === "retired" || status === "irrelevant") return "#5e5a4a";
+  if (status === "partial") return "#9c8a4a";
+  return "#7a7a7a";
+}
+
+function hexPoints(r) {
+  const pts = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * 2 * Math.PI - Math.PI / 2;
+    pts.push(`${(Math.cos(a) * r).toFixed(1)},${(Math.sin(a) * r).toFixed(1)}`);
+  }
+  return pts.join(" ");
+}
+
+function showGraphDetail(d, mind) {
+  const detail = document.getElementById("kg-graph-detail");
+  if (!detail) return;
+  if (d.kind === "power") {
+    if (d.is_owner) {
+      detail.innerHTML = `<div><strong>${d.power}</strong> (you) — open the other lenses for the full mind contents.</div>`;
+      return;
+    }
+    const beliefs = (mind.beliefs || []).filter(b => b.about_power === d.power)
+      .sort((a, b) => (b.hp || 0) - (a.hp || 0)).slice(0, 5);
+    const sus = (mind.suspicions || []).filter(s => s.about_power === d.power);
+    const beliefStr = beliefs.length
+      ? beliefs.map(b => `<li>[${b.status||'active'} hp=${(b.hp||0).toFixed(1)}] ${kgEscape(b.head||'')}</li>`).join("")
+      : "<li><i>none</i></li>";
+    const susStr = sus.length
+      ? sus.map(s => `<li>[w=${(s.weight||0).toFixed(2)}] ${kgEscape(s.tag||'')}: ${kgEscape((s.note||'').slice(0,80))}</li>`).join("")
+      : "";
+    detail.innerHTML = `
+      <div style="font-variant: small-caps; letter-spacing:0.06em; color: var(--gold-bright); font-weight:600; margin-bottom:6px;">${d.power}</div>
+      <div style="color:var(--ink-faint); margin-bottom:4px;">Top beliefs:</div>
+      <ul style="margin:0 0 8px 18px; padding:0;">${beliefStr}</ul>
+      ${sus.length ? `<div style="color:var(--ink-faint); margin-bottom:4px;">Suspicions:</div><ul style="margin:0 0 0 18px; padding:0;">${susStr}</ul>` : ""}
+    `;
+    return;
+  }
+  // Generic node detail: dump key fields from raw object
+  const r = d.raw || {};
+  const rows = Object.entries(r)
+    .filter(([k, v]) => v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => {
+      const val = typeof v === "object" ? JSON.stringify(v) : String(v);
+      return `<tr><td style="color:var(--ink-faint); padding-right:8px; vertical-align:top;">${kgEscape(k)}</td><td style="word-break:break-word;">${kgEscape(val.slice(0,200))}</td></tr>`;
+    }).join("");
+  detail.innerHTML = `
+    <div style="font-variant: small-caps; letter-spacing:0.06em; color: var(--gold-bright); font-weight:600; margin-bottom:6px;">${d.kind}</div>
+    <div style="margin-bottom:8px; font-style:italic; color:var(--ink);">${kgEscape(d.label)}</div>
+    <table style="font-size:11px; color:var(--ink-dim);"><tbody>${rows}</tbody></table>
+  `;
+}
+
+// ── Dreams lens — show year-end consolidation entries ────────
+function renderKGDreams(area, mind) {
+  const journal = mind.private_journal || [];
+  if (journal.length === 0) {
+    area.innerHTML = `<div class="kg-empty-state">No journal entries yet. Dreams (year-end consolidations) appear after FALL ADJUSTMENT each year.</div>`;
+    return;
+  }
+  // Show DREAM entries first (year-end consolidations), then journals
+  const dreams = journal.filter(e => e.kind === "dream-consolidation");
+  const others = journal.filter(e => e.kind !== "dream-consolidation");
+  const list = document.createElement("div");
+  list.className = "kg-list";
+  if (dreams.length > 0) {
+    const grp = document.createElement("div");
+    grp.className = "kg-list-group";
+    grp.innerHTML = `<div class="kg-list-group-title">💭 Year-end consolidations (${dreams.length})</div>`;
+    for (const d of [...dreams].reverse()) {
+      const card = document.createElement("div");
+      card.className = "kg-record";
+      card.innerHTML = `
+        <div class="kg-record-head">
+          <span class="kg-record-tag active">${kgEscape(d.phase || '?')}</span>
+          <span style="color:var(--ink-faint); font-size:11px;">${d.timestamp ? new Date(d.timestamp*1000).toLocaleString() : ''}</span>
+        </div>
+        <div style="font-size:13px; line-height:1.55; color:var(--ink); padding:6px 0; white-space:pre-wrap;">${kgEscape(d.text || '')}</div>
+      `;
+      grp.appendChild(card);
+    }
+    list.appendChild(grp);
+  }
+  if (others.length > 0) {
+    const grp = document.createElement("div");
+    grp.className = "kg-list-group";
+    grp.innerHTML = `<div class="kg-list-group-title">Journal entries (${others.length})</div>`;
+    for (const j of [...others].reverse().slice(0, 30)) {
+      const card = document.createElement("div");
+      card.className = "kg-record";
+      card.innerHTML = `
+        <div class="kg-record-head">
+          <span class="kg-record-tag pending">${kgEscape(j.phase || '?')}</span>
+          <span style="color:var(--ink-faint); font-size:11px;">${kgEscape(j.kind || 'note')}</span>
+        </div>
+        <div style="font-size:12px; line-height:1.5; color:var(--ink-dim); padding:4px 0; white-space:pre-wrap;">${kgEscape(j.text || '')}</div>
+      `;
+      grp.appendChild(card);
+    }
+    list.appendChild(grp);
+  }
+  // Show suspicions too
+  const suspicions = mind.suspicions || [];
+  if (suspicions.length > 0) {
+    const grp = document.createElement("div");
+    grp.className = "kg-list-group";
+    grp.innerHTML = `<div class="kg-list-group-title">Active suspicions (${suspicions.length})</div>`;
+    for (const s of suspicions) {
+      const card = document.createElement("div");
+      card.className = "kg-record";
+      const w = (s.weight || 0).toFixed(2);
+      card.innerHTML = `
+        <div class="kg-record-head">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:2px; background: var(--c-${s.about_power}); margin-right:4px;"></span>
+          <span style="font-weight:600;">${kgEscape(s.about_power || '?')}</span>
+          <span style="color:var(--gold);">[${kgEscape(s.tag || '?')}, w=${w}]</span>
+          <span style="color:var(--ink-faint); font-size:11px;">${kgEscape(s.first_seen_phase || '')} → ${kgEscape(s.last_seen_phase || '')}</span>
+        </div>
+        <div style="font-size:12px; color:var(--ink); padding:2px 0;">${kgEscape(s.note || '')}</div>
+      `;
+      grp.appendChild(card);
+    }
+    list.appendChild(grp);
+  }
+  area.innerHTML = "";
+  area.appendChild(list);
+}
+
+function kgEscape(s) {
+  if (s == null) return "";
+  const d = document.createElement("div");
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+// ============================================================
+// SNAPSHOT BROWSER — list past games + open one
+// ============================================================
+async function openSnapshotBrowser() {
+  document.getElementById("kg-snap-modal").style.display = "block";
+  const list = document.getElementById("kg-snap-list");
+  list.innerHTML = "Loading…";
+  try {
+    const r = await fetch("/api/substrate/snapshots");
+    const data = await r.json();
+    const games = data.games || [];
+    if (games.length === 0) {
+      list.innerHTML = `<div style="color:var(--ink-faint); font-style:italic;">
+        No past games saved yet. Snapshots write automatically once you play a phase.
+      </div>`;
+      return;
+    }
+    list.innerHTML = "";
+    for (const g of games) {
+      const dt = new Date(g.last_modified * 1000);
+      const card = document.createElement("div");
+      card.style.cssText = "border:1px solid var(--line); border-radius:4px; padding:10px 14px; margin-bottom:8px;";
+      card.innerHTML = `
+        <div style="display:flex; align-items:baseline; gap:12px;">
+          <div style="font-variant: small-caps; letter-spacing: 0.06em; font-weight:600; color:var(--gold-bright);">
+            ${kgEscape(g.label)}
+          </div>
+          <div style="color:var(--ink-faint); font-size:11.5px;">
+            ${g.n_snapshots} snapshot${g.n_snapshots === 1 ? "" : "s"}
+            · last ${dt.toLocaleString()}
+          </div>
+        </div>
+        <div style="font-size:11.5px; color:var(--ink-dim); margin-top:4px; font-family: ui-monospace, Menlo, monospace;">
+          ${kgEscape(g.path)}
+        </div>
+      `;
+      list.appendChild(card);
+    }
+    const helpDiv = document.createElement("div");
+    helpDiv.style.cssText = "color:var(--ink-faint); font-size:11.5px; font-style:italic; margin-top:14px;";
+    helpDiv.textContent = "Open the folder paths above to see the JSON files. Each snapshot has the full mind state, dialogue log, and a one-paragraph summary.";
+    list.appendChild(helpDiv);
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--danger);">Error: ${kgEscape(e.message || e)}</div>`;
+  }
+}
+function closeSnapshotBrowser() {
+  document.getElementById("kg-snap-modal").style.display = "none";
+}
+
+// ============================================================
+// BIOPSY MODAL — show raw prompts/responses per agent
+// ============================================================
+async function openBiopsyModal() {
+  const modal = document.getElementById("kg-biopsy-modal");
+  if (!modal) {
+    alert("biopsy modal element not found in DOM — please reload the page");
+    return;
+  }
+  modal.style.display = "flex";
+  document.addEventListener("keydown", _biopsyEsc);
+  const sel = document.getElementById("biopsy-power-pick");
+  const list = document.getElementById("biopsy-list");
+  const summary = document.getElementById("biopsy-summary");
+  sel.innerHTML = '<option value="">(pick a power)</option>';
+  list.innerHTML = `<div style="color:var(--ink-faint); font-style:italic;">Loading agent list…</div>`;
+  summary.textContent = "fetching /api/biopsy/all…";
+  let allInfo = {};
+  try {
+    const r = await fetch("/api/biopsy/all");
+    if (!r.ok) {
+      list.innerHTML = `<div style="color:var(--danger);">HTTP ${r.status} from /api/biopsy/all. Is a game in progress?</div>`;
+      summary.textContent = "";
+      return;
+    }
+    const data = await r.json();
+    if (data.error) {
+      list.innerHTML = `<div style="color:var(--danger);">${kgEscape(data.error)}</div>`;
+      summary.textContent = "";
+      return;
+    }
+    allInfo = data.powers || {};
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--danger);">Connection error: ${kgEscape(e.message || e)}</div>`;
+    summary.textContent = "";
+    return;
+  }
+  const powerNames = Object.keys(allInfo);
+  if (powerNames.length === 0) {
+    list.innerHTML = `<div style="color:var(--ink-faint); font-style:italic;">No agents in current session. Start a game first.</div>`;
+    summary.textContent = "";
+    return;
+  }
+  // Add the "view all" option first
+  const allOpt = document.createElement("option");
+  allOpt.value = "_ALL_";
+  allOpt.textContent = "ALL POWERS (most recent calls, grouped)";
+  sel.appendChild(allOpt);
+  // Then per-power
+  for (const [p, info] of Object.entries(allInfo)) {
+    const opt = document.createElement("option");
+    opt.value = p;
+    const arch = info.archetype || "?";
+    const calls = info.total_calls || 0;
+    opt.textContent = `${p} — ${arch} (${calls} calls)`;
+    sel.appendChild(opt);
+  }
+  // Summary line
+  const totals = Object.values(allInfo).reduce((sum, i) => sum + (i.total_calls || 0), 0);
+  summary.textContent = `${powerNames.length} agents · ${totals} total LLM calls captured · ⬇ Download for the raw JSON`;
+  // Pre-select current inspector power if it's in the list
+  if (KG.selected_power && allInfo[KG.selected_power]) {
+    sel.value = KG.selected_power;
+    loadBiopsyForPower();
+  } else {
+    list.innerHTML = `<div style="color:var(--ink-faint); font-style:italic;">Pick a power above (or "ALL POWERS") to see raw prompts/responses. The ⬇ Download button gives you everything as JSON.</div>`;
+  }
+}
+function _biopsyEsc(e) { if (e.key === "Escape") closeBiopsyModal(); }
+function closeBiopsyModal() {
+  document.getElementById("kg-biopsy-modal").style.display = "none";
+  document.removeEventListener("keydown", _biopsyEsc);
+}
+
+// Download the entire biopsy as JSON (one bundle covering all powers).
+async function downloadBiopsyAll() {
+  try {
+    const r = await fetch("/api/biopsy/all");
+    const overview = await r.json();
+    const powers = Object.keys(overview.powers || {});
+    const all = {};
+    for (const p of powers) {
+      try {
+        const r2 = await fetch(`/api/biopsy/prompts/${p}`);
+        all[p] = await r2.json();
+      } catch (e) {
+        all[p] = {error: String(e)};
+      }
+    }
+    const bundle = {
+      downloaded_at: new Date().toISOString(),
+      overview: overview,
+      per_power: all,
+    };
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `biopsy-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("Download failed: " + (e.message || e));
+  }
+}
+
+// Open the biopsy modal pre-selected on a specific power.
+// Called from per-row 🔬 buttons in the main board's power list.
+async function openBiopsyModalForPower(power) {
+  await openBiopsyModal();
+  const sel = document.getElementById("biopsy-power-pick");
+  if (sel) {
+    sel.value = power;
+    loadBiopsyForPower();
+  }
+}
+async function loadBiopsyForPower() {
+  const power = document.getElementById("biopsy-power-pick").value;
+  const list = document.getElementById("biopsy-list");
+  if (!power) {
+    list.innerHTML = `<div style="color:var(--ink-faint); font-style:italic;">Pick a power above.</div>`;
+    return;
+  }
+  if (power === "_ALL_") {
+    return loadBiopsyAll();
+  }
+  list.innerHTML = "Loading…";
+  try {
+    const r = await fetch(`/api/biopsy/prompts/${power}`);
+    const data = await r.json();
+    if (data.error) {
+      list.innerHTML = `<div style="color:var(--danger);">${kgEscape(data.error)}</div>`;
+      return;
+    }
+    renderBiopsyRecords(list, data.records || [], power);
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--danger);">Error: ${kgEscape(e.message || e)}</div>`;
+  }
+}
+
+async function loadBiopsyAll() {
+  const list = document.getElementById("biopsy-list");
+  list.innerHTML = "Loading all agents…";
+  try {
+    // Hit /api/biopsy/all to find which powers exist, then pull each
+    const r = await fetch("/api/biopsy/all");
+    const data = await r.json();
+    const powers = Object.keys(data.powers || {});
+    if (powers.length === 0) {
+      list.innerHTML = `<div style="color:var(--ink-faint); font-style:italic;">No agents in session.</div>`;
+      return;
+    }
+    // Fetch each in parallel
+    const results = await Promise.all(powers.map(async p => {
+      try {
+        const rp = await fetch(`/api/biopsy/prompts/${p}`);
+        return [p, await rp.json()];
+      } catch (e) { return [p, {records: [], error: String(e)}]; }
+    }));
+    // Flatten + sort by timestamp desc, tag each with the power
+    const all = [];
+    for (const [p, d] of results) {
+      const arch = (data.powers[p] || {}).archetype || "?";
+      for (const rec of (d.records || [])) {
+        all.push({ ...rec, _power: p, _archetype: arch });
+      }
+    }
+    all.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    if (all.length === 0) {
+      list.innerHTML = `<div style="color:var(--ink-faint); font-style:italic;">
+        No LLM calls captured yet across any agent.
+      </div>`;
+      return;
+    }
+    renderBiopsyRecords(list, all, "_ALL_", true);
+  } catch (e) {
+    list.innerHTML = `<div style="color:var(--danger);">Error: ${kgEscape(e.message || e)}</div>`;
+  }
+}
+
+function renderBiopsyRecords(list, records, powerLabel, showPower=false) {
+  if (records.length === 0) {
+    list.innerHTML = `<div style="color:var(--ink-faint); font-style:italic;">
+      No LLM calls captured yet for ${kgEscape(powerLabel)}.
+    </div>`;
+    return;
+  }
+  list.innerHTML = "";
+  // For per-power view, records come oldest-first; reverse to newest-first
+  const arr = showPower ? records : [...records].reverse();
+  for (let i = 0; i < arr.length; i++) {
+    const r = arr[i];
+    const idx = showPower ? (i + 1) : (records.length - i);
+    const dt = new Date((r.timestamp || 0) * 1000);
+    const powerTag = showPower
+      ? `<span style="background: var(--c-${r._power}); color:#000; padding:1px 6px; border-radius:3px; font-size:10px; font-weight:600; letter-spacing:0.04em;">${r._power}</span>`
+      : '';
+    const card = document.createElement("div");
+    card.style.cssText = "margin-bottom:12px; border:1px solid var(--line); border-radius:4px; overflow:hidden;";
+    card.innerHTML = `
+      <div style="padding:8px 12px; background: rgba(200,163,90,0.08); display:flex; gap:10px; align-items:baseline; cursor:pointer; user-select:none; flex-wrap:wrap;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';">
+        ${powerTag}
+        <span style="font-variant: small-caps; letter-spacing: 0.06em; color: var(--gold-bright); font-weight:600;">#${idx} ${kgEscape(r.kind || 'call')}</span>
+        <span style="color:var(--ink-faint); font-size:11px; font-variant: tabular-nums;">${dt.toLocaleTimeString()} · ${(r.elapsed_seconds || 0).toFixed(1)}s · prompt ${r.prompt_chars || (r.prompt||'').length}c → response ${r.response_chars || (r.response||'').length}c</span>
+        ${r.error ? `<span style="color:var(--danger); font-size:11px;">ERROR: ${kgEscape(r.error)}</span>` : ''}
+        <span style="margin-left:auto; color:var(--ink-faint); font-size:11px;">click to expand ▼</span>
+      </div>
+      <div style="display:none; padding: 0;">
+        <div style="padding:8px 12px; background: rgba(0,0,0,0.18); border-top:1px solid var(--line);">
+          <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-faint); margin-bottom:4px;">PROMPT</div>
+          <pre style="white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--ink); margin:0; max-height:400px; overflow-y:auto;">${kgEscape(r.prompt || '')}</pre>
+        </div>
+        <div style="padding:8px 12px; background: rgba(109,171,91,0.06); border-top:1px solid var(--line);">
+          <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:0.1em; color:var(--ink-faint); margin-bottom:4px;">RESPONSE</div>
+          <pre style="white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--ink); margin:0; max-height:400px; overflow-y:auto;">${kgEscape(r.response || '')}</pre>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  }
+}
+</script>
+
+
+</body>
+</html>

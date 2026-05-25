@@ -1,0 +1,532 @@
+/* ============================================================
+ * Diplomacy Mind Viewer — styles
+ * Period archive feel: cream paper, ink, sparing color.
+ * ============================================================ */
+
+:root {
+  --paper: #f5efe0;
+  --paper-dim: #ebe3cf;
+  --ink: #1f1d18;
+  --ink-soft: #4a4538;
+  --rule: #c9b994;
+
+  --power-AUSTRIA: #b03a48;   /* deep red */
+  --power-ENGLAND: #2a4365;   /* navy */
+  --power-FRANCE:  #4a90b8;   /* sky-blue */
+  --power-GERMANY: #4a4538;   /* graphite */
+  --power-RUSSIA:  #b8855e;   /* tan */
+  --power-TURKEY:  #c8a04a;   /* gold */
+  --power-ITALY:   #6a8a3b;   /* olive — unused in 6-power but defined */
+
+  --status-active:  #2f7a4a;  /* promoted belief */
+  --status-proto:   #b8893a;  /* tentative */
+  --status-retired: #8a8275;
+  --status-broken:  #b03a48;
+  --status-kept:    #2f7a4a;
+  --status-pending: #8c7d5b;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  height: 100vh;
+  overflow: hidden;
+}
+
+button, input, select {
+  font-family: inherit;
+  color: var(--ink);
+}
+
+a { color: var(--ink); }
+a:hover { color: var(--power-AUSTRIA); }
+
+/* ============================================================
+ * Folder picker (no folder selected)
+ * ============================================================ */
+.folder-picker {
+  max-width: 600px;
+  margin: 80px auto;
+  padding: 32px;
+  background: var(--paper-dim);
+  border: 1px solid var(--rule);
+}
+.folder-picker h1 { margin: 0 0 16px 0; font-weight: 500; }
+.folder-picker ul { padding-left: 20px; }
+.folder-picker li { margin: 6px 0; font-family: "SF Mono", Menlo, monospace; }
+.folder-picker .err { color: var(--status-broken); }
+
+/* ============================================================
+ * App layout — full viewport grid
+ * ============================================================ */
+#app {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 56px 40px 1fr 200px;
+  grid-template-columns: 1fr;
+}
+
+/* ============================================================
+ * Top bar
+ * ============================================================ */
+#topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-dim);
+  gap: 24px;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand .logo { font-size: 22px; color: var(--ink-soft); }
+.brand .title { font-size: 20px; font-weight: 600; letter-spacing: 0.02em; }
+#folder-select {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  padding: 4px 8px;
+  font-size: 12px;
+  margin-left: 12px;
+}
+.phase-control {
+  display: flex; align-items: center; gap: 12px;
+  flex: 1;
+  max-width: 700px;
+}
+.phase-control button {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  width: 28px; height: 28px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.phase-control button:hover { background: var(--rule); }
+#phase-scrubber { flex: 1; }
+#phase-label {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  color: var(--ink-soft);
+  min-width: 180px;
+  text-align: right;
+}
+.view-control .toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* ============================================================
+ * Power tabs
+ * ============================================================ */
+#power-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-dim);
+}
+.power-tab {
+  flex: 1;
+  padding: 8px 16px;
+  border-right: 1px solid var(--rule);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: transparent;
+  border-top: none;
+  border-bottom: none;
+  border-left: none;
+  text-align: left;
+  font-family: inherit;
+  position: relative;
+}
+.power-tab:last-child { border-right: none; }
+.power-tab .archetype {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+.power-tab .power-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.power-tab .sc-badge {
+  position: absolute;
+  top: 6px; right: 8px;
+  font-size: 11px;
+  font-family: "SF Mono", Menlo, monospace;
+  color: var(--ink-soft);
+}
+.power-tab.selected {
+  background: var(--paper);
+  box-shadow: inset 0 -3px 0 var(--power-color, var(--ink));
+}
+.power-tab:hover:not(.selected) { background: rgba(0,0,0,0.03); }
+
+/* ============================================================
+ * Main: map left, right column with graph + inspector
+ * ============================================================ */
+#main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+}
+
+#map-pane {
+  position: relative;
+  background: var(--paper);
+  border-right: 1px solid var(--rule);
+  overflow: hidden;
+}
+#map-wrap {
+  width: 100%; height: 100%;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+#map-bg {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+#map-svg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+#map-svg .prov-hit {
+  pointer-events: all;
+  cursor: pointer;
+  fill: rgba(0,0,0,0);
+}
+#map-svg .prov-hit:hover { fill: rgba(0,0,0,0.06); }
+#map-svg .unit {
+  pointer-events: none;
+  font-family: "SF Mono", Menlo, monospace;
+  font-weight: 700;
+  font-size: 12px;
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: white;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+#map-svg .unit-bg {
+  pointer-events: none;
+}
+#map-svg .sc-dot {
+  pointer-events: none;
+}
+#map-svg .commit-arrow {
+  pointer-events: none;
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+#map-svg .commit-target {
+  pointer-events: none;
+  fill: none;
+  stroke-width: 3;
+  stroke-dasharray: 6 3;
+}
+
+/* tooltip */
+#map-tooltip {
+  position: absolute;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 6px 10px;
+  font-size: 12px;
+  pointer-events: none;
+  display: none;
+  white-space: nowrap;
+  border-radius: 2px;
+  z-index: 100;
+}
+
+/* ============================================================
+ * Right pane
+ * ============================================================ */
+#right-pane {
+  display: grid;
+  grid-template-rows: 1.3fr 1fr;
+  min-height: 0;
+}
+
+#graph-pane {
+  position: relative;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+}
+#graph-svg {
+  width: 100%; height: 100%;
+  display: block;
+}
+#graph-svg .link {
+  fill: none;
+  stroke-width: 1.5;
+  stroke: var(--ink-soft);
+  opacity: 0.4;
+}
+#graph-svg .link.commitment-kept   { stroke: var(--status-kept); opacity: 0.7; }
+#graph-svg .link.commitment-broken { stroke: var(--status-broken); stroke-dasharray: 4 3; opacity: 0.9; }
+#graph-svg .link.commitment-pending{ stroke: var(--status-pending); stroke-dasharray: 2 4; opacity: 0.6; }
+#graph-svg .link.evidence          { stroke: var(--ink-soft); opacity: 0.25; }
+#graph-svg .link.highlight         { opacity: 1; stroke-width: 2.5; }
+#graph-svg .link.faded             { opacity: 0.07; }
+
+#graph-svg .node circle, #graph-svg .node rect {
+  cursor: pointer;
+  transition: stroke-width 0.15s;
+}
+#graph-svg .node text {
+  pointer-events: none;
+  font-size: 11px;
+  font-family: "Iowan Old Style", Georgia, serif;
+  fill: var(--ink);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+#graph-svg .node.faded { opacity: 0.18; }
+#graph-svg .node.highlight circle,
+#graph-svg .node.highlight rect {
+  stroke: var(--ink);
+  stroke-width: 3;
+}
+
+#graph-legend {
+  position: absolute;
+  bottom: 8px; left: 8px;
+  background: rgba(245, 239, 224, 0.92);
+  padding: 6px 10px;
+  font-size: 11px;
+  display: flex;
+  gap: 14px;
+  border: 1px solid var(--rule);
+}
+#graph-legend .dot {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+  border: 1px solid var(--ink-soft);
+}
+#graph-legend .dot.self          { background: var(--ink); }
+#graph-legend .dot.power         { background: var(--paper-dim); }
+#graph-legend .dot.belief-active { background: var(--status-active); }
+#graph-legend .dot.belief-proto  { background: var(--status-proto); }
+#graph-legend .dot.prediction    { background: #6a8ab8; }
+#graph-legend .dot.intent        { background: #8a5b9a; }
+
+/* ============================================================
+ * Inspector
+ * ============================================================ */
+#inspector-pane {
+  background: var(--paper-dim);
+  padding: 12px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#character-card {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 10px;
+}
+#character-card .archetype {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+#character-card .brief {
+  font-style: italic;
+  font-size: 14px;
+  margin: 4px 0 8px 0;
+  color: var(--ink);
+  line-height: 1.4;
+}
+#character-card .stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 14px;
+  font-size: 12px;
+  font-family: "SF Mono", Menlo, monospace;
+  color: var(--ink-soft);
+}
+#character-card .stats .stat-label {
+  color: var(--ink-soft);
+}
+#character-card .stats .stat-value {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+#inspector-detail {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.5;
+}
+#inspector-detail .hint {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+#inspector-detail h3 {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 12px 0 4px 0;
+  font-weight: 600;
+}
+#inspector-detail .head {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+#inspector-detail .body {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+#inspector-detail .meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 8px;
+}
+#inspector-detail .meta .k { color: var(--ink-soft); }
+#inspector-detail .meta .v { color: var(--ink); }
+
+#inspector-detail .pill {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 11px;
+  border-radius: 9px;
+  border: 1px solid currentColor;
+  margin-right: 4px;
+}
+#inspector-detail .pill.active   { color: var(--status-active); }
+#inspector-detail .pill.proto    { color: var(--status-proto); }
+#inspector-detail .pill.kept     { color: var(--status-kept); }
+#inspector-detail .pill.broken   { color: var(--status-broken); }
+#inspector-detail .pill.pending  { color: var(--status-pending); }
+#inspector-detail .pill.confirmed{ color: var(--status-active); }
+#inspector-detail .pill.refuted  { color: var(--status-broken); }
+#inspector-detail .pill.open     { color: #4a78a8; }
+
+/* commitment list rows in inspector */
+.commit-row {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  gap: 8px;
+  padding: 4px 6px;
+  border-bottom: 1px dotted var(--rule);
+  cursor: pointer;
+  align-items: center;
+}
+.commit-row:hover { background: rgba(0,0,0,0.04); }
+.commit-row .who {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  min-width: 60px;
+}
+.commit-row .what {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.belief-row, .pred-row {
+  padding: 6px 6px;
+  border-bottom: 1px dotted var(--rule);
+  cursor: pointer;
+}
+.belief-row:hover, .pred-row:hover { background: rgba(0,0,0,0.04); }
+.belief-row .head {
+  font-size: 13px;
+  font-weight: normal;
+  margin-bottom: 2px;
+}
+.belief-row .meta-line {
+  font-size: 11px;
+  color: var(--ink-soft);
+  font-family: "SF Mono", Menlo, monospace;
+}
+.pred-row .pred-line {
+  font-size: 12px;
+  font-family: "SF Mono", Menlo, monospace;
+}
+.pred-row .pred-rationale {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+  font-style: italic;
+}
+
+/* ============================================================
+ * Messages strip
+ * ============================================================ */
+#messages-strip {
+  background: var(--paper-dim);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.strip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+}
+.strip-title { font-weight: 600; }
+.strip-filter { display: flex; gap: 14px; font-size: 12px; }
+.strip-filter label { display: flex; gap: 4px; align-items: center; cursor: pointer; }
+
+#msg-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px 12px 16px;
+  font-size: 13px;
+}
+.msg {
+  padding: 6px 8px;
+  border-bottom: 1px dotted var(--rule);
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 12px;
+}
+.msg .from-to {
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.msg .text {
+  white-space: pre-wrap;
+  font-family: "Iowan Old Style", Georgia, serif;
+  line-height: 1.4;
+}
+.msg .commit-block {
+  display: block;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(0,0,0,0.04);
+  border-left: 2px solid var(--ink-soft);
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--ink-soft);
+  white-space: pre;
+}

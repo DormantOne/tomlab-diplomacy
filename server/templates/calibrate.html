@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Map calibration — Diplomacy</title>
+<style>
+:root {
+  --bg: #1a1814; --panel: #25221c; --panel-2: #2f2b23;
+  --ink: #e9e1cd; --ink-dim: #b3a98e; --line: #4a4234;
+  --gold: #c8a35a; --gold-bright: #f0c878;
+  --ok: #6dab5b; --danger: #d8492b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  background: var(--bg); color: var(--ink); font-size: 14px;
+}
+.topbar {
+  height: 52px; background: linear-gradient(180deg, #2c2820 0%, #1f1c16 100%);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 18px; gap: 14px;
+}
+.topbar h1 {
+  font-size: 18px; color: var(--gold-bright);
+  font-variant: small-caps; letter-spacing: 0.06em; font-weight: 600;
+}
+.topbar .progress { color: var(--ink-dim); font-size: 13px; }
+.topbar .spacer { flex: 1; }
+.topbar button {
+  background: transparent; border: 1px solid var(--line); color: var(--ink-dim);
+  padding: 6px 14px; cursor: pointer; border-radius: 4px;
+  font-variant: small-caps; letter-spacing: 0.05em;
+}
+.topbar button:hover { border-color: var(--gold); color: var(--gold-bright); }
+.topbar button.primary { background: var(--gold); color: #000; border-color: var(--gold); font-weight: 600; }
+.topbar button.danger  { border-color: var(--danger); color: var(--danger); }
+
+.layout {
+  display: grid; grid-template-columns: 280px 1fr;
+  height: calc(100vh - 52px);
+}
+.sidebar {
+  background: var(--panel); border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+.sidebar h3 {
+  padding: 10px 14px 6px; font-variant: small-caps; letter-spacing: 0.08em;
+  color: var(--gold); font-size: 12px; border-bottom: 1px solid var(--line);
+}
+.sidebar .legend {
+  padding: 8px 14px; font-size: 12px; color: var(--ink-dim);
+  border-bottom: 1px solid var(--line); line-height: 1.6;
+}
+.sidebar .legend .swatch {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle;
+}
+.prov-item {
+  display: grid; grid-template-columns: 14px 1fr auto;
+  align-items: center; gap: 8px;
+  padding: 6px 14px; cursor: pointer;
+  border-bottom: 1px dotted rgba(74,66,52,0.4);
+  font-size: 13px;
+}
+.prov-item:hover { background: var(--panel-2); }
+.prov-item.placed { color: var(--ok); }
+.prov-item.placed .check::before { content: "✓"; }
+.prov-item.target {
+  background: rgba(200,163,90,0.12); color: var(--gold-bright);
+  border-left: 3px solid var(--gold);
+  padding-left: 11px;
+}
+.prov-item .kind {
+  font-size: 10px; color: var(--ink-dim); font-style: italic;
+}
+.prov-item .coords {
+  font-family: 'SF Mono', Menlo, monospace; font-size: 10px;
+  color: var(--ok); opacity: 0.7;
+}
+
+.canvas-wrap {
+  position: relative; overflow: auto; background: #0b0907;
+  display: flex; align-items: flex-start; justify-content: flex-start;
+}
+.canvas-wrap.empty {
+  align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.upload-zone {
+  border: 2px dashed var(--line); border-radius: 8px;
+  padding: 60px 80px; text-align: center;
+  background: var(--panel); cursor: pointer;
+  transition: border-color 0.2s;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--gold); background: rgba(200,163,90,0.05);
+}
+.upload-zone h2 {
+  font-variant: small-caps; letter-spacing: 0.06em;
+  color: var(--gold-bright); margin-bottom: 12px; font-size: 22px;
+}
+.upload-zone p { color: var(--ink-dim); margin-bottom: 8px; line-height: 1.6; }
+.upload-zone input[type=file] { display: none; }
+
+#map-container {
+  position: relative; display: inline-block;
+}
+#map-container img { display: block; user-select: none; }
+#map-container svg {
+  position: absolute; top: 0; left: 0;
+  pointer-events: auto;
+}
+#map-container .dot { cursor: pointer; }
+#map-container .dot circle {
+  fill: var(--ok); stroke: #000; stroke-width: 1;
+  filter: drop-shadow(0 0 3px rgba(109,171,91,0.7));
+}
+#map-container .dot.target circle {
+  fill: var(--gold-bright); stroke: #000; stroke-width: 1.5;
+  filter: drop-shadow(0 0 4px var(--gold-bright));
+}
+#map-container .dot text {
+  font-size: 10px; fill: #fff; text-anchor: middle;
+  font-weight: 600;
+  text-shadow: 0 1px 2px #000, 0 0 3px #000;
+  pointer-events: none;
+}
+#cursor-target {
+  position: absolute; pointer-events: none;
+  background: rgba(200,163,90,0.9);
+  color: #000; font-weight: 600; font-size: 12px;
+  padding: 4px 8px; border-radius: 3px;
+  font-variant: small-caps; letter-spacing: 0.04em;
+  display: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+#cursor-target::after {
+  content: ""; position: absolute; top: -6px; left: 12px;
+  border: 6px solid transparent; border-bottom-color: rgba(200,163,90,0.9);
+}
+
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--gold);
+  border-radius: 6px; padding: 24px; max-width: 480px;
+}
+.modal h3 { color: var(--gold-bright); margin-bottom: 8px; }
+.modal p { color: var(--ink-dim); margin-bottom: 14px; line-height: 1.5; }
+.modal .actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal button {
+  background: transparent; border: 1px solid var(--line); color: var(--ink);
+  padding: 6px 14px; cursor: pointer; border-radius: 3px;
+  font-variant: small-caps; letter-spacing: 0.05em;
+}
+.modal button.primary { background: var(--gold); color: #000; border-color: var(--gold); }
+.modal button.danger { border-color: var(--danger); color: var(--danger); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Map calibration</h1>
+  <div class="progress" id="progress">— / 75 placed</div>
+  <div class="spacer"></div>
+  <button onclick="bulkPaste()">Paste coords JSON</button>
+  <button onclick="clearAll()" class="danger">Reset</button>
+  <button onclick="window.location='/'">Back to game</button>
+  <button onclick="saveAndReturn()" class="primary">Save calibration</button>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <h3>Provinces</h3>
+    <div class="legend">
+      <span class="swatch" style="background: #6dab5b;"></span>placed
+      <br>
+      <span class="swatch" style="background: #f0c878;"></span>currently selected — click on the map
+    </div>
+    <h3 id="powers-header" style="margin-top:0;">Click a province to (re)place it</h3>
+    <div id="prov-list"></div>
+  </div>
+
+  <div class="canvas-wrap" id="canvas-wrap">
+    <!-- Either upload zone OR map+overlay -->
+    <div class="upload-zone" id="upload-zone">
+      <h2>Drop a map image here</h2>
+      <p>PNG, JPG, GIF, WebP, or SVG. Any resolution — ideally a real Diplomacy board.</p>
+      <p>You'll click each province center next.</p>
+      <p style="margin-top: 14px;"><button class="primary" onclick="document.getElementById('file-input').click()" style="background:var(--gold);color:#000;border:none;padding:8px 18px;border-radius:4px;cursor:pointer;font-variant:small-caps;letter-spacing:0.06em;">Choose file…</button></p>
+      <input type="file" id="file-input" accept="image/*">
+    </div>
+  </div>
+</div>
+
+<div id="cursor-target"></div>
+
+<script>
+"use strict";
+
+let ALL_PROVINCES = [];        // sorted province codes
+let PROV_KINDS = {};            // code -> "land"/"sea"/"coast"
+let HOME_CENTERS = {};          // power -> [code...]
+let PLACED = {};                // code -> [x, y] in image-pixel coords
+let TARGET_CODE = null;         // which province is currently being placed
+let IMAGE_URL = null;
+let IMAGE_W = 0, IMAGE_H = 0;
+
+async function api(path, method="GET", body=null) {
+  const opts = { method, headers: {"Content-Type": "application/json"} };
+  if (body !== null) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  return r.json();
+}
+
+async function init() {
+  const cal = await api("/load_calibration");
+  ALL_PROVINCES = cal.all_provinces || [];
+  PROV_KINDS = cal.province_kinds || {};
+  HOME_CENTERS = cal.home_centers || {};
+  PLACED = cal.provinces || {};
+  IMAGE_URL = cal.image_url;
+  IMAGE_W = (cal.image_size || [1100,720])[0];
+  IMAGE_H = (cal.image_size || [1100,720])[1];
+
+  // First unplaced province becomes the initial target
+  const next = ALL_PROVINCES.find(c => !PLACED[c]);
+  TARGET_CODE = next || ALL_PROVINCES[0];
+
+  if (IMAGE_URL) {
+    showMap();
+  }
+  renderSidebar();
+  setupUpload();
+  updateProgress();
+}
+
+function setupUpload() {
+  const zone = document.getElementById("upload-zone");
+  const input = document.getElementById("file-input");
+  input.addEventListener("change", (e) => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+  zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
+  zone.addEventListener("dragleave", (e) => { zone.classList.remove("dragover"); });
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault(); zone.classList.remove("dragover");
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  zone.addEventListener("click", (e) => {
+    if (e.target.tagName !== "BUTTON") input.click();
+  });
+}
+
+async function handleFile(file) {
+  if (!file.type.startsWith("image/")) {
+    alert("Please choose an image file.");
+    return;
+  }
+  const ext = file.name.split(".").pop().toLowerCase();
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const dataUrl = e.target.result;
+    const r = await api("/upload_map_bg", "POST", { image: dataUrl, ext });
+    if (r.error) { alert("Upload failed: " + r.error); return; }
+    IMAGE_URL = r.url;
+    // Load image to get natural dimensions
+    const img = new Image();
+    img.onload = () => {
+      IMAGE_W = img.naturalWidth;
+      IMAGE_H = img.naturalHeight;
+      showMap();
+    };
+    img.src = IMAGE_URL + "?t=" + Date.now();
+  };
+  reader.readAsDataURL(file);
+}
+
+function showMap() {
+  const wrap = document.getElementById("canvas-wrap");
+  wrap.classList.remove("empty");
+  wrap.innerHTML = `
+    <div id="map-container" style="position:relative;">
+      <img src="${IMAGE_URL}" id="bg-img" alt="map">
+      <svg id="overlay" width="${IMAGE_W}" height="${IMAGE_H}" viewBox="0 0 ${IMAGE_W} ${IMAGE_H}"></svg>
+    </div>
+  `;
+  const img = document.getElementById("bg-img");
+  // Ensure dimensions are known
+  if (img.naturalWidth) {
+    IMAGE_W = img.naturalWidth; IMAGE_H = img.naturalHeight;
+    document.getElementById("overlay").setAttribute("width", IMAGE_W);
+    document.getElementById("overlay").setAttribute("height", IMAGE_H);
+    document.getElementById("overlay").setAttribute("viewBox", `0 0 ${IMAGE_W} ${IMAGE_H}`);
+  }
+  img.addEventListener("load", () => {
+    IMAGE_W = img.naturalWidth; IMAGE_H = img.naturalHeight;
+    const ov = document.getElementById("overlay");
+    ov.setAttribute("width", IMAGE_W);
+    ov.setAttribute("height", IMAGE_H);
+    ov.setAttribute("viewBox", `0 0 ${IMAGE_W} ${IMAGE_H}`);
+    redrawDots();
+  });
+  // Set up click-to-place
+  const ov = document.getElementById("overlay");
+  ov.addEventListener("click", onMapClick);
+  ov.addEventListener("mousemove", onMapHover);
+  ov.addEventListener("mouseleave", () => {
+    document.getElementById("cursor-target").style.display = "none";
+  });
+  redrawDots();
+}
+
+function onMapClick(ev) {
+  if (!TARGET_CODE) return;
+  const ov = document.getElementById("overlay");
+  const rect = ov.getBoundingClientRect();
+  const x = Math.round((ev.clientX - rect.left) * IMAGE_W / rect.width);
+  const y = Math.round((ev.clientY - rect.top)  * IMAGE_H / rect.height);
+  PLACED[TARGET_CODE] = [x, y];
+  // Auto-advance to next unplaced
+  const idx = ALL_PROVINCES.indexOf(TARGET_CODE);
+  let next = null;
+  for (let i = 1; i <= ALL_PROVINCES.length; i++) {
+    const c = ALL_PROVINCES[(idx + i) % ALL_PROVINCES.length];
+    if (!PLACED[c]) { next = c; break; }
+  }
+  TARGET_CODE = next;  // null if all placed
+  redrawDots();
+  renderSidebar();
+  updateProgress();
+}
+
+function onMapHover(ev) {
+  if (!TARGET_CODE) return;
+  const tip = document.getElementById("cursor-target");
+  tip.style.display = "block";
+  tip.textContent = "Click to place " + TARGET_CODE;
+  tip.style.left = (ev.clientX + 14) + "px";
+  tip.style.top = (ev.clientY + 14) + "px";
+}
+
+function redrawDots() {
+  const ov = document.getElementById("overlay");
+  if (!ov) return;
+  ov.innerHTML = "";
+  for (const [code, xy] of Object.entries(PLACED)) {
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "dot" + (code === TARGET_CODE ? " target" : ""));
+    g.setAttribute("transform", `translate(${xy[0]},${xy[1]})`);
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("r", 7); c.setAttribute("cx", 0); c.setAttribute("cy", 0);
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("y", 3); t.textContent = code;
+    g.appendChild(c); g.appendChild(t);
+    g.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      // re-target this code
+      TARGET_CODE = code;
+      delete PLACED[code];
+      redrawDots(); renderSidebar(); updateProgress();
+    });
+    ov.appendChild(g);
+  }
+}
+
+function renderSidebar() {
+  const list = document.getElementById("prov-list");
+  list.innerHTML = "";
+  // Group: home centers per power, then neutrals, then seas
+  const byPower = {};
+  const seen = new Set();
+  for (const [power, codes] of Object.entries(HOME_CENTERS)) {
+    byPower[power] = codes.slice().sort();
+    for (const c of codes) seen.add(c);
+  }
+  const neutrals = ALL_PROVINCES.filter(c => PROV_KINDS[c] !== "sea" && !seen.has(c)).sort();
+  const seas = ALL_PROVINCES.filter(c => PROV_KINDS[c] === "sea").sort();
+
+  function addRow(code) {
+    const item = document.createElement("div");
+    item.className = "prov-item"
+      + (PLACED[code] ? " placed" : "")
+      + (code === TARGET_CODE ? " target" : "");
+    item.onclick = () => {
+      // If already placed, clear it so click-to-place puts it back
+      delete PLACED[code];
+      TARGET_CODE = code;
+      redrawDots(); renderSidebar(); updateProgress();
+    };
+    const c1 = document.createElement("span"); c1.className = "check";
+    const c2 = document.createElement("span");
+    c2.innerHTML = code + ' <span class="kind">' + (PROV_KINDS[code] || "") + '</span>';
+    const c3 = document.createElement("span"); c3.className = "coords";
+    c3.textContent = PLACED[code] ? `${PLACED[code][0]},${PLACED[code][1]}` : "";
+    item.appendChild(c1); item.appendChild(c2); item.appendChild(c3);
+    list.appendChild(item);
+  }
+
+  function header(text) {
+    const h = document.createElement("div");
+    h.style.cssText = "padding: 8px 14px 4px; font-variant: small-caps; letter-spacing: 0.06em; color: var(--gold); font-size: 11px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--panel-2);";
+    h.textContent = text;
+    list.appendChild(h);
+  }
+  for (const power of Object.keys(byPower).sort()) {
+    header(power.toLowerCase() + " homes");
+    for (const c of byPower[power]) addRow(c);
+  }
+  if (neutrals.length) {
+    header("neutral land");
+    for (const c of neutrals) addRow(c);
+  }
+  if (seas.length) {
+    header("seas");
+    for (const c of seas) addRow(c);
+  }
+}
+
+function updateProgress() {
+  const total = ALL_PROVINCES.length;
+  const placed = Object.keys(PLACED).length;
+  document.getElementById("progress").textContent = `${placed} / ${total} placed` +
+    (TARGET_CODE ? ` · target: ${TARGET_CODE}` : " · all done!");
+}
+
+async function clearAll() {
+  if (!confirm("Wipe the uploaded map and ALL placed coords?")) return;
+  await api("/clear_calibration", "POST");
+  PLACED = {}; IMAGE_URL = null;
+  document.getElementById("canvas-wrap").classList.add("empty");
+  document.getElementById("canvas-wrap").innerHTML = `
+    <div class="upload-zone" id="upload-zone">
+      <h2>Drop a map image here</h2>
+      <p>PNG, JPG, GIF, WebP, or SVG.</p>
+      <p style="margin-top: 14px;"><button class="primary" onclick="document.getElementById('file-input').click()" style="background:var(--gold);color:#000;border:none;padding:8px 18px;border-radius:4px;cursor:pointer;font-variant:small-caps;letter-spacing:0.06em;">Choose file…</button></p>
+      <input type="file" id="file-input" accept="image/*">
+    </div>`;
+  setupUpload();
+  TARGET_CODE = ALL_PROVINCES[0];
+  renderSidebar();
+  updateProgress();
+}
+
+async function saveAndReturn() {
+  const placed = Object.keys(PLACED).length;
+  if (placed < ALL_PROVINCES.length) {
+    if (!confirm(`Only ${placed} of ${ALL_PROVINCES.length} provinces placed. Save anyway? (Unplaced ones will fall back to the parchment-map positions.)`)) return;
+  }
+  const r = await api("/save_calibration", "POST", {
+    provinces: PLACED,
+    image_size: [IMAGE_W, IMAGE_H],
+  });
+  if (r.error) { alert("Save failed: " + r.error); return; }
+  alert(`Saved ${r.saved} province coords. Returning to the game.`);
+  window.location = "/";
+}
+
+function bulkPaste() {
+  const txt = prompt(
+    `Paste a JSON object mapping province codes to [x,y] arrays in image-pixel coordinates.\n\n` +
+    `Example:\n{ "PAR": [320, 510], "MAR": [350, 600], "BRE": [240, 470] }`
+  );
+  if (!txt) return;
+  let obj;
+  try { obj = JSON.parse(txt); }
+  catch (e) { alert("Invalid JSON: " + e.message); return; }
+  if (typeof obj !== "object") { alert("Top-level must be an object."); return; }
+  let n = 0;
+  for (const [code, xy] of Object.entries(obj)) {
+    const c = code.toUpperCase();
+    if (Array.isArray(xy) && xy.length === 2) {
+      PLACED[c] = [parseInt(xy[0], 10) || 0, parseInt(xy[1], 10) || 0];
+      n++;
+    }
+  }
+  TARGET_CODE = ALL_PROVINCES.find(c => !PLACED[c]) || null;
+  redrawDots(); renderSidebar(); updateProgress();
+  alert(`Imported ${n} province coords.`);
+}
+
+init();
+</script>
+</body>
+</html>

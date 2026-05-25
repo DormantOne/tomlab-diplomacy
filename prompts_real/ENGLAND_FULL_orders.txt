@@ -1,0 +1,120 @@
+=== ENGLAND (FULL) — call kind: orders ===
+timestamp: 2026-05-05 19:06:02
+elapsed: 8.82s
+prompt_length: 3,887 chars (~971 tokens)
+response_length: 2,728 chars
+
+--- PROMPT ---
+I am Parson Hawthorne. My word is given carefully and kept absolutely.
+
+  OPEN_COMMITMENT_FROM [FRANCE]: non_aggression ENGLAND by 1902-WINTER-ADJUSTMENTS
+  OPEN_COMMITMENT_TO [FRANCE]: non_aggression FRANCE by 1902-WINTER-ADJUSTMENTS
+  OPEN_COMMITMENT_FROM [AUSTRIA]: non_aggression ENGLAND by 1902-WINTER-ADJUSTMENTS
+  OPEN_COMMITMENT_TO [AUSTRIA]: non_aggression AUSTRIA by 1902-WINTER-ADJUSTMENTS
+  OPEN_COMMITMENT_FROM [RUSSIA]: non_aggression ENGLAND by 1902-WINTER-ADJUSTMENTS
+  OPEN_COMMITMENT_TO [RUSSIA]: non_aggression RUSSIA by 1902-WINTER-ADJUSTMENTS
+  OPEN_COMMITMENT_FROM [TURKEY]: non_aggression ENGLAND by 1902-WINTER-ADJUSTMENTS
+  OPEN_COMMITMENT_FROM [GERMANY]: not_move_to -> NAP by 1902-SPRING-MOVES
+  CREDIBILITY_SUMMARY: kept-record: AUS:1/1 RUS:1/1 TUR:1/1 GER:2/2
+
+BOARD (S1902):
+AUS:4,ABUD+FGRE+ABUL+ATRI|ENG:4,FBEL+FEDI+ALON+FLVP|FRA:3,APAR+ATUS+FWES|GER:3,ABAL+AMUN+FKIE|RUS:5,AVIE+FSEV+FBOT+ABOH+AMOS|TUR:3,ACON+AANK+FBLA
+
+Recent messages:
+  (older: 48 msgs — AUSTRIA=9, ENGLAND=9, FRANCE=9, GERMANY=9, RUSSIA=6, TURKEY=6)
+  RUSSIA -> ENGLAND: England, Russia honors our accord. The Channel remains ours. As France rebuilds and Austria consolidates, shall we quietly ensure the Mediterranean stays fractured? Mutual benefit. [[commit   non_aggr...
+  RUSSIA -> TURKEY: Turkey, your Balkan focus serves us both. I secure the south; you hold the east. Austria grows nervous. Might we signal strength without threatening each other's gains? [[commit   not_move_to: BUL by ...
+  RUSSIA -> AUSTRIA: Austria, our understanding deepens. You hold Balkans; Russia watches from afar. But France stirs. Shall we confirm: neither of us eyes Trieste or Serbia this season? [[commit   not_move_to: TRI by S19...
+  TURKEY -> ENGLAND: England, Russia holds. Our non-aggression stands firm through winter. France weakens while we consolidate. Shall we maintain this profitable arrangement? [[commit   non_aggression: with ENGLAND throug...
+  TURKEY -> GERMANY: Germany, your Munich restraint noted. Black Sea remains demilitarized as promised. Let's hold this balance—you secure the Rhine, we secure the South. [[commit   demilitarize: BLA with GERMANY through ...
+  TURKEY -> AUSTRIA: Austria, stability endures. Your Balkans, our sphere—neither threatens. This arrangement serves us both through winter adjustments and beyond. [[commit   non_aggression: with AUSTRIA through 1902 ]]
+
+YOUR UNITS — order each one:
+  F BEL: HOLD or MOVE to one of: ENG, HOL, NTH, PIC
+  F EDI: HOLD or MOVE to one of: CLY, NTH, NWG, YOR
+  A LON: HOLD or MOVE to one of: WAL, YOR
+  F LVP: HOLD or MOVE to one of: CLY, IRI, NAO, WAL
+
+ORDER FORMS:
+  HOLD     :  A PAR H
+  MOVE     :  A PAR - BUR
+  SUPPORT  :  A MUN S A KIE - BER
+              A PAR S A MAR
+  CONVOY   :  F MAO C A LON - BRE
+
+PREDICTIONS (REQUIRED): emit at least one near-term prediction about another
+power's behavior in the next phase. Format each as:
+  {"about": "<power>", "type": "<event_type>", "target": "<prov>", "window": "near_term"}
+Event types: move_to, attack, support, alliance, non_action, build_at, elimination_of.
+
+JSON output, this exact shape (no prose around the JSON):
+{
+  "orders": ["A PAR - BUR", "F BRE - MAO"],
+  "plan": {
+    "head": "<one-line tactical summary>",
+    "body": "<reasoning, 1-3 sentences>",
+    "parent_intent_id": null
+  },
+  "predictions": [
+    {"about": "GERMANY", "type": "non_action", "target": "BEL",
+      "window": "near_term", "rationale": "GER has no spare unit"}
+  ]
+}
+
+You MAY also include "proto_belief" and "proto_intent" objects in the JSON
+when you want to propose new ones. Both are optional. Schemas:
+  proto_belief: {"about": "<power>", "type": "<disposition|tactical_pattern|relationship|risk_assessment|credibility>", "head": "...", "body": "..."}
+  proto_intent: {"head": "...", "body": "...", "target_powers": [...], "target_provinces": [...], "horizon": "S1902"}
+
+--- RESPONSE ---
+```json
+{
+  "orders": [
+    "F BEL - PIC",
+    "F EDI - NWG",
+    "A LON - YOR",
+    "F LVP - CLY"
+  ],
+  "plan": {
+    "head": "Consolidate home position; prepare Channel dominance while honoring commitments.",
+    "body": "France is severely weakened (3 units). Moving F BEL to PIC keeps pressure on France while maintaining distance from German-controlled Kiel; F EDI and F LVP shift to support CLY/NWG, securing the Western Isles and preparing for future leverage in the Atlantic or North Sea. A LON to YOR positions for flexibility toward either Wales or Yorkshire, avoiding aggressive posture. This maintains my non-aggression pledges (none of these moves violate France, Austria, Russia, or Turkey accords) while strengthening my interior lines and naval coordination for the next turn.",
+    "parent_intent_id": null
+  },
+  "predictions": [
+    {
+      "about": "FRANCE",
+      "type": "build_at",
+      "target": "BRE",
+      "window": "near_term",
+      "rationale": "France has 3 units and likely lost supply in S1902; Brest is logical rebuild point for naval recovery."
+    },
+    {
+      "about": "RUSSIA",
+      "type": "move_to",
+      "target": "RUM",
+      "window": "near_term",
+      "rationale": "Russia controls 5 units and has committed to non-interference in Balkans (TRI/SER with Austria). Advancing toward Romania/Black Sea theater is consistent with their stated southern strategy and demilitarization pledge with Turkey."
+    },
+    {
+      "about": "GERMANY",
+      "type": "non_action",
+      "target": "BEL",
+      "window": "near_term",
+      "rationale": "Germany has only 3 units and committed not to move into NAP by S1902-SPRING-MOVES. With France weakened, Germany likely holds current position (BAL, MUN, KIE) to consolidate strength."
+    }
+  ],
+  "proto_belief": {
+    "about": "FRANCE",
+    "type": "risk_assessment",
+    "head": "France is critically weakened and unlikely to threaten England this cycle.",
+    "body": "With only 3 units and no fleet in the Atlantic, France cannot project power against England. My non-aggression pledge is low-cost; France is the likely victim of surrounding powers' expansion."
+  },
+  "proto_intent": {
+    "head": "Secure Channel and strengthen naval position while remaining the trustworthy guarantor of peace.",
+    "body": "Build redundancy in my Western fleets (CLY coordination) to dominate the Channel and North Sea without breaking any commitment. This positions England to profit from the consolidation phase when weaker powers (France) rebuild or when aggressive powers (Russia, possibly Austria) overextend.",
+    "target_powers": ["FRANCE", "GERMANY"],
+    "target_provinces": ["PIC", "BEL", "NWG", "CLY"],
+    "horizon": "S1902"
+  }
+}
+```

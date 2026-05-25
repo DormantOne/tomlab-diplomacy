@@ -1,0 +1,111 @@
+=== AUSTRIA (MUTED) — call kind: orders ===
+timestamp: 2026-05-05 19:05:52
+elapsed: 9.93s
+prompt_length: 3,220 chars (~805 tokens)
+response_length: 3,025 chars
+
+--- PROMPT ---
+I am Marshal Veil. I plan in arcs. I keep my word when watched and remember when others do not.
+
+
+BOARD (S1902):
+AUS:4,ABUD+FGRE+ABUL+ATRI|ENG:4,FBEL+FEDI+ALON+FLVP|FRA:3,APAR+ATUS+FWES|GER:3,ABAL+AMUN+FKIE|RUS:5,AVIE+FSEV+FBOT+ABOH+AMOS|TUR:3,ACON+AANK+FBLA
+
+Recent messages:
+  (older: 48 msgs — AUSTRIA=9, ENGLAND=9, FRANCE=9, GERMANY=9, RUSSIA=6, TURKEY=6)
+  RUSSIA -> ENGLAND: England, Russia honors our accord. The Channel remains ours. As France rebuilds and Austria consolidates, shall we quietly ensure the Mediterranean stays fractured? Mutual benefit. [[commit   non_aggr...
+  RUSSIA -> TURKEY: Turkey, your Balkan focus serves us both. I secure the south; you hold the east. Austria grows nervous. Might we signal strength without threatening each other's gains? [[commit   not_move_to: BUL by ...
+  RUSSIA -> AUSTRIA: Austria, our understanding deepens. You hold Balkans; Russia watches from afar. But France stirs. Shall we confirm: neither of us eyes Trieste or Serbia this season? [[commit   not_move_to: TRI by S19...
+  TURKEY -> ENGLAND: England, Russia holds. Our non-aggression stands firm through winter. France weakens while we consolidate. Shall we maintain this profitable arrangement? [[commit   non_aggression: with ENGLAND throug...
+  TURKEY -> GERMANY: Germany, your Munich restraint noted. Black Sea remains demilitarized as promised. Let's hold this balance—you secure the Rhine, we secure the South. [[commit   demilitarize: BLA with GERMANY through ...
+  TURKEY -> AUSTRIA: Austria, stability endures. Your Balkans, our sphere—neither threatens. This arrangement serves us both through winter adjustments and beyond. [[commit   non_aggression: with AUSTRIA through 1902 ]]
+
+YOUR UNITS — order each one:
+  A BUD: HOLD or MOVE to one of: GAL, RUM, SER, TRI, VIE
+  F GRE: HOLD or MOVE to one of: AEG, ALB, BUL, ION
+  A BUL: HOLD or MOVE to one of: CON, GRE, RUM, SER
+  A TRI: HOLD or MOVE to one of: ALB, BUD, SER, TYR, VEN, VIE
+
+ORDER FORMS:
+  HOLD     :  A PAR H
+  MOVE     :  A PAR - BUR
+  SUPPORT  :  A MUN S A KIE - BER
+              A PAR S A MAR
+  CONVOY   :  F MAO C A LON - BRE
+
+PREDICTIONS (REQUIRED): emit at least one near-term prediction about another
+power's behavior in the next phase. Format each as:
+  {"about": "<power>", "type": "<event_type>", "target": "<prov>", "window": "near_term"}
+Event types: move_to, attack, support, alliance, non_action, build_at, elimination_of.
+
+JSON output, this exact shape (no prose around the JSON):
+{
+  "orders": ["A PAR - BUR", "F BRE - MAO"],
+  "plan": {
+    "head": "<one-line tactical summary>",
+    "body": "<reasoning, 1-3 sentences>",
+    "parent_intent_id": null
+  },
+  "predictions": [
+    {"about": "GERMANY", "type": "non_action", "target": "BEL",
+      "window": "near_term", "rationale": "GER has no spare unit"}
+  ]
+}
+
+You MAY also include "proto_belief" and "proto_intent" objects in the JSON
+when you want to propose new ones. Both are optional. Schemas:
+  proto_belief: {"about": "<power>", "type": "<disposition|tactical_pattern|relationship|risk_assessment|credibility>", "head": "...", "body": "..."}
+  proto_intent: {"head": "...", "body": "...", "target_powers": [...], "target_provinces": [...], "horizon": "S1902"}
+
+--- RESPONSE ---
+```json
+{
+  "orders": [
+    "A BUD - SER",
+    "F GRE - ALB",
+    "A BUL - CON",
+    "A TRI - VEN"
+  ],
+  "plan": {
+    "head": "Consolidate southern leverage while honoring Balkan accords; position for Mediterranean influence.",
+    "body": "BUD→SER deepens Balkan presence without violating the non-aggression with Turkey (Serbia is Austria's sphere per accord). GRE→ALB moves toward the Ionian and Greek coast, securing influence over the Mediterranean fragmentation Russia proposed. BUL→CON advances toward Turkish sphere as a show of strength, signaling readiness without crossing into Anatolia (respecting Turkey's east). TRI→VEN secures the Adriatic and positions for future pressure on Italy or support of the Balkans—this move honors the non-aggression with Turkey (no Trieste threat) while building depth.",
+    "parent_intent_id": null
+  },
+  "predictions": [
+    {
+      "about": "RUSSIA",
+      "type": "move_to",
+      "target": "RUM",
+      "window": "near_term",
+      "rationale": "Russia has 5 units and controls Severus and Bohemia; RUM is unguarded and aligns with their southern consolidation narrative. They will move F SEV or A BOH into RUM to secure the Ottoman border."
+    },
+    {
+      "about": "TURKEY",
+      "type": "non_action",
+      "target": "BLA",
+      "window": "near_term",
+      "rationale": "Turkey has committed demilitarization of BLA with Germany. F BLA will HOLD despite German restraint, honoring the accord and avoiding provocation."
+    },
+    {
+      "about": "FRANCE",
+      "type": "move_to",
+      "target": "ITA",
+      "window": "near_term",
+      "rationale": "France is weakened (3 units) and isolated. They will likely attempt to move MAR or WES toward Italy (A PAR - TUS or similar) to contest the Mediterranean and prevent Austria/Russia dominance."
+    }
+  ],
+  "proto_belief": {
+    "about": "RUSSIA",
+    "type": "credibility",
+    "head": "Russia honors public accords under observation but orchestrates.",
+    "body": "Russia has broadcast multiple non-aggression and demilitarization commitments (with England, Turkey, Austria) and signaled restraint. However, they control 5 units—the largest force—and their phrasing ('Russia watches from afar,' 'signal strength') suggests they are positioning for opportunistic gains once accords are tested or when attention shifts. They will keep their word only as long as it serves their arc toward dominance."
+  },
+  "proto_intent": {
+    "head": "Secure Balkan foothold and Mediterranean balance against Russia's southern expansion.",
+    "body": "Austria will move into SER, CON, and VEN to anchor control of the Balkans and Adriatic, honoring Turkey's non-aggression while building defensive depth. The aim is to prevent Russia from isolating Turkey or dominating the Mediterranean, and to position for a potential realignment if France recovers or Germany moves against the balance.",
+    "target_powers": ["TURKEY", "RUSSIA"],
+    "target_provinces": ["SER", "CON", "VEN", "ALB"],
+    "horizon": "S1902"
+  }
+}
+```
