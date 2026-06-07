@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Diplomacy — Live</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='view.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='live.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- START OVERLAY: shown until /api/live/start is called          -->
+<!-- ============================================================ -->
+<div id="start-overlay">
+  <div class="start-card">
+    <h1>Substrate-driven Diplomacy</h1>
+    <p class="lede">
+      Six AI powers, each with a distinct character, play a game of Diplomacy
+      while their minds — beliefs, predictions, intents, commitments — are
+      tracked in real time. Watch them form theories about each other, make
+      and break promises, and see the credibility ledgers update phase by phase.
+    </p>
+
+    <h3>Pick a model</h3>
+    <div class="llm-options">
+      <label class="llm-option">
+        <input type="radio" name="llm-kind" value="anthropic" data-model="claude-haiku-4-5-20251001" checked>
+        <div>
+          <div class="opt-title">Claude Haiku 4.5</div>
+          <div class="opt-sub">Fast, cheap, JSON-clean. ~30s/phase. Recommended.</div>
+        </div>
+      </label>
+      <label class="llm-option">
+        <input type="radio" name="llm-kind" value="anthropic" data-model="claude-opus-4-7">
+        <div>
+          <div class="opt-title">Claude Opus 4.7</div>
+          <div class="opt-sub">Slower, smartest, more expensive. Several minutes/phase.</div>
+        </div>
+      </label>
+      <label class="llm-option">
+        <input type="radio" name="llm-kind" value="ollama" data-model="gpt-oss:20b">
+        <div>
+          <div class="opt-title">Ollama gpt-oss:20b</div>
+          <div class="opt-sub">Local, free, can be slow. Requires <code>ollama serve</code>.</div>
+        </div>
+      </label>
+      <label class="llm-option">
+        <input type="radio" name="llm-kind" value="ollama" data-model="llama3.2:3b">
+        <div>
+          <div class="opt-title">Ollama llama3.2:3b</div>
+          <div class="opt-sub">Local, smaller, faster. Lower-quality reasoning.</div>
+        </div>
+      </label>
+      <label class="llm-option">
+        <input type="radio" name="llm-kind" value="stub" data-model="">
+        <div>
+          <div class="opt-title">Stub LLM</div>
+          <div class="opt-sub">Deterministic, no network. For testing only.</div>
+        </div>
+      </label>
+    </div>
+
+    <div class="form-row">
+      <label>
+        Max phases:
+        <input id="start-max-phases" type="number" min="2" max="48" value="12">
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="start-btn" class="primary">Start game</button>
+      <a href="/view" class="secondary">View past games instead</a>
+    </div>
+
+    <div id="start-error" class="err"></div>
+  </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- MAIN APP (hidden until started)                               -->
+<!-- ============================================================ -->
+<div id="app" class="hidden">
+
+  <!-- TOP BAR: brand, phase, controls -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">⬡</span>
+      <span class="title">Live</span>
+      <span class="run-meta" id="run-meta"></span>
+    </div>
+
+    <div class="phase-control">
+      <button id="phase-prev" title="Previous phase">◀</button>
+      <input type="range" id="phase-scrubber" min="0" max="0" value="0">
+      <button id="phase-next" title="Next phase">▶</button>
+      <span id="phase-label">—</span>
+    </div>
+
+    <div class="live-controls">
+      <button id="run-next-btn" class="primary">Run next phase</button>
+      <button id="auto-play-btn">Auto-play</button>
+      <label class="toggle">
+        <input type="checkbox" id="fovea-toggle">
+        <span>Foveated</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- POWER TABS -->
+  <nav id="power-tabs"></nav>
+
+  <!-- MAIN PANES -->
+  <main id="main">
+    <section id="map-pane">
+      <div id="map-wrap">
+        <img id="map-bg" src="{{ url_for('static', filename='map_bg.png') }}" alt="Diplomacy map">
+        <svg id="map-svg" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+    </section>
+
+    <section id="right-pane">
+      <div id="graph-pane">
+        <svg id="graph-svg"></svg>
+        <div id="graph-legend">
+          <span><span class="dot self"></span>self</span>
+          <span><span class="dot power"></span>power</span>
+          <span><span class="dot belief-active"></span>belief (active)</span>
+          <span><span class="dot belief-proto"></span>belief (proto)</span>
+          <span><span class="dot prediction"></span>prediction</span>
+          <span><span class="dot intent"></span>intent</span>
+        </div>
+        <div id="thinking-banner" class="hidden">
+          <span class="thinking-label">Computing <b id="thinking-phase">—</b>…</span>
+          <span class="thinking-spinner">⬡</span>
+        </div>
+      </div>
+      <div id="inspector-pane">
+        <div id="character-card">
+          <div class="archetype" id="char-archetype">—</div>
+          <div class="brief" id="char-brief">Pick a power.</div>
+          <div class="stats" id="char-stats"></div>
+        </div>
+        <div id="inspector-detail">
+          <div class="hint">Click a node in the graph or a row below to inspect.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- BOTTOM: TWO PANELS — phase log on left, messages on right -->
+  <footer id="bottom-strip">
+    <div id="phase-log-pane">
+      <div class="strip-header">
+        <span class="strip-title">Phase log</span>
+      </div>
+      <div id="phase-log-list"></div>
+    </div>
+    <div id="messages-strip">
+      <div class="strip-header">
+        <span class="strip-title">Messages — <span id="msg-phase-label">—</span></span>
+        <span class="strip-filter">
+          <label><input type="checkbox" id="msg-filter-self" checked> from</label>
+          <label><input type="checkbox" id="msg-filter-to-self" checked> to</label>
+          <label><input type="checkbox" id="msg-filter-other"> all</label>
+        </span>
+      </div>
+      <div id="msg-list"></div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="{{ url_for('static', filename='live.js') }}"></script>
+
+</body>
+</html>

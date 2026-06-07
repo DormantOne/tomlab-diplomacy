@@ -1,0 +1,113 @@
+=== GERMANY (MUTED) — call kind: orders ===
+timestamp: 2026-05-05 19:06:19
+elapsed: 8.77s
+prompt_length: 3,112 chars (~778 tokens)
+response_length: 2,883 chars
+
+--- PROMPT ---
+I am Baron Korvin. I trust no one before they have earned it twice.
+
+
+BOARD (S1902):
+AUS:4,ABUD+FGRE+ABUL+ATRI|ENG:4,FBEL+FEDI+ALON+FLVP|FRA:3,APAR+ATUS+FWES|GER:3,ABAL+AMUN+FKIE|RUS:5,AVIE+FSEV+FBOT+ABOH+AMOS|TUR:3,ACON+AANK+FBLA
+
+Recent messages:
+  (older: 48 msgs — AUSTRIA=9, ENGLAND=9, FRANCE=9, GERMANY=9, RUSSIA=6, TURKEY=6)
+  RUSSIA -> ENGLAND: England, Russia honors our accord. The Channel remains ours. As France rebuilds and Austria consolidates, shall we quietly ensure the Mediterranean stays fractured? Mutual benefit. [[commit   non_aggr...
+  RUSSIA -> TURKEY: Turkey, your Balkan focus serves us both. I secure the south; you hold the east. Austria grows nervous. Might we signal strength without threatening each other's gains? [[commit   not_move_to: BUL by ...
+  RUSSIA -> AUSTRIA: Austria, our understanding deepens. You hold Balkans; Russia watches from afar. But France stirs. Shall we confirm: neither of us eyes Trieste or Serbia this season? [[commit   not_move_to: TRI by S19...
+  TURKEY -> ENGLAND: England, Russia holds. Our non-aggression stands firm through winter. France weakens while we consolidate. Shall we maintain this profitable arrangement? [[commit   non_aggression: with ENGLAND throug...
+  TURKEY -> GERMANY: Germany, your Munich restraint noted. Black Sea remains demilitarized as promised. Let's hold this balance—you secure the Rhine, we secure the South. [[commit   demilitarize: BLA with GERMANY through ...
+  TURKEY -> AUSTRIA: Austria, stability endures. Your Balkans, our sphere—neither threatens. This arrangement serves us both through winter adjustments and beyond. [[commit   non_aggression: with AUSTRIA through 1902 ]]
+
+YOUR UNITS — order each one:
+  A BAL: must HOLD
+  A MUN: HOLD or MOVE to one of: BER, BOH, BUR, KIE, RUH, SIL, TYR
+  F KIE: HOLD or MOVE to one of: BAL, BER, DEN, HEL, HOL
+
+ORDER FORMS:
+  HOLD     :  A PAR H
+  MOVE     :  A PAR - BUR
+  SUPPORT  :  A MUN S A KIE - BER
+              A PAR S A MAR
+  CONVOY   :  F MAO C A LON - BRE
+
+PREDICTIONS (REQUIRED): emit at least one near-term prediction about another
+power's behavior in the next phase. Format each as:
+  {"about": "<power>", "type": "<event_type>", "target": "<prov>", "window": "near_term"}
+Event types: move_to, attack, support, alliance, non_action, build_at, elimination_of.
+
+JSON output, this exact shape (no prose around the JSON):
+{
+  "orders": ["A PAR - BUR", "F BRE - MAO"],
+  "plan": {
+    "head": "<one-line tactical summary>",
+    "body": "<reasoning, 1-3 sentences>",
+    "parent_intent_id": null
+  },
+  "predictions": [
+    {"about": "GERMANY", "type": "non_action", "target": "BEL",
+      "window": "near_term", "rationale": "GER has no spare unit"}
+  ]
+}
+
+You MAY also include "proto_belief" and "proto_intent" objects in the JSON
+when you want to propose new ones. Both are optional. Schemas:
+  proto_belief: {"about": "<power>", "type": "<disposition|tactical_pattern|relationship|risk_assessment|credibility>", "head": "...", "body": "..."}
+  proto_intent: {"head": "...", "body": "...", "target_powers": [...], "target_provinces": [...], "horizon": "S1902"}
+
+--- RESPONSE ---
+```json
+{
+  "orders": [
+    "A BAL H",
+    "A MUN - BOH",
+    "F KIE - BER"
+  ],
+  "plan": {
+    "head": "Consolidate center density and prepare for opportunistic leverage in 1903.",
+    "body": "Munich retreats to Bohemia to reinforce our central grip and support future moves toward Silesia or pressure on Austria/Russia's soft borders. Kiel advances to Berlin to solidify the north German core and prevent Russian or English opportunism in the Baltic region. These moves keep our position compact, defensible, and poised to exploit the fracturing alliances I observe forming around us.",
+    "parent_intent_id": null
+  },
+  "predictions": [
+    {
+      "about": "RUSSIA",
+      "type": "move_to",
+      "target": "SIL",
+      "window": "near_term",
+      "rationale": "Russia commands 5 units and has secured non-aggression with Austria and Turkey. SIL is proximate to Moscow and undefended; Russia has signaled restraint but controls the board's largest force—southern expansion is locked by agreements, so northern/western pressure becomes logical."
+    },
+    {
+      "about": "AUSTRIA",
+      "type": "non_action",
+      "target": "TRI",
+      "window": "near_term",
+      "rationale": "Austria has committed via message not to move to Trieste this season and shows deference to Russia in the Balkans. With 4 units and stable borders, Austria will likely consolidate rather than provoke."
+    },
+    {
+      "about": "FRANCE",
+      "type": "move_to",
+      "target": "BUR",
+      "window": "near_term",
+      "rationale": "France holds only 3 units and controls Par, Tus, Wes. Burgundy is adjacent to both English-held Lon and our Kiel-Berlin line. France is weak and will seek to expand into the void or defend against German pressure."
+    }
+  ],
+  "proto_belief": {
+    "about": "RUSSIA",
+    "type": "credibility",
+    "head": "Russia has earned one trust-point through consistent honoring of stated accords.",
+    "body": "Russia's messages to England, Turkey, and Austria all reference prior commitments and signal continuity. However, Russia's dominant position (5 units) and geographic reach mean their restraint could evaporate quickly if a profitable opportunity emerges. I will require a second demonstration of restraint or sacrifice before treating them as truly reliable."
+  },
+  "proto_intent": {
+    "head": "Avoid premature entanglement; build German interior strength for 1903 leverage.",
+    "body": "Germany is surrounded by multiple powers signaling non-aggression but also jockeying for position. I will not commit to any alliance until at least one other power has proven trustworthy twice. Instead, I consolidate Bohemia and Berlin to create a credible threat that raises my value as an ally and deters cheap aggression.",
+    "target_powers": [],
+    "target_provinces": [
+      "BOH",
+      "BER",
+      "SIL"
+    ],
+    "horizon": "S1902"
+  }
+}
+```

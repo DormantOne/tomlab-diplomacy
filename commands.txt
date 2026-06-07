@@ -1,0 +1,11 @@
+lsof -t -i :5050 | xargs kill -9
+lsof -t -i :5099 | xargs kill -9
+lsof -t -i :5003 | xargs kill -9
+export STOCKFISH_PATH=/opt/homebrew/Cellar/stockfish/18/bin/stockfish
+python app.py --port 5003 --db kg.sqlite
+uvicorn app.main:app --reload --port 8000
+lsof -t -i :8008 | xargs kill -9
+uvicorn mazekg_app:app --reload --port 8008
+Open docker:
+
+open -b com.docker.docker

@@ -1,0 +1,64 @@
+=== AUSTRIA (MUTED) — call kind: negotiate ===
+timestamp: 2026-05-05 19:05:34
+elapsed: 2.75s
+prompt_length: 2,581 chars (~645 tokens)
+response_length: 819 chars
+
+--- PROMPT ---
+I am Marshal Veil. I plan in arcs. I keep my word when watched and remember when others do not.
+
+
+BOARD (S1902):
+AUS:4,ABUD+FGRE+ABUL+ATRI|ENG:4,FBEL+FEDI+ALON+FLVP|FRA:3,APAR+ATUS+FWES|GER:3,ABAL+AMUN+FKIE|RUS:5,AVIE+FSEV+FBOT+ABOH+AMOS|TUR:3,ACON+AANK+FBLA
+
+Recent messages:
+  (older: 30 msgs — AUSTRIA=6, ENGLAND=6, FRANCE=6, GERMANY=6, RUSSIA=3, TURKEY=3)
+  RUSSIA -> ENGLAND: France eyes the Mediterranean while Russia circles the Balkans. Shall we two secure the Channel and deny them the straits? A mutual respect serves us both. [[commit   non_aggression: with ENGLAND thro...
+  RUSSIA -> AUSTRIA: You court stability east while Russia masses. I propose: you hold the Balkans, I secure Burgundy and watch the Rhine. Neither threatens the other's sphere. [[commit   not_move_to: BUR by S1901   not_m...
+  RUSSIA -> GERMANY: Munich between us need not burn. You secure the North, I secure the South. Shall we both avoid the region and let stronger powers clash elsewhere? [[commit   not_move_to: MUN by S1901 ]]
+  TURKEY -> FRANCE: France, Turkey speaks. Austria claims to seek stability. Shall we coordinate on Italy's fate and ensure balanced growth in the Mediterranean? [[commit   non_aggression: with FRA through 1902 ]]
+  TURKEY -> ENGLAND: England, from Turkey. Russia courts you on Mediterranean peace. I support this. Might we three respect France's western position while I secure the Balkans? [[commit   not_move_to: NAP by F1901 ]]
+  TURKEY -> GERMANY: Germany, Turkey here. Your Munich commitment reassures us both. Let's maintain this balance—I focus eastward, you secure the Rhine. Fair terms? [[commit   not_move_to: TYR by F1901 ]]
+
+TASK: Compose 0-3 outgoing messages for S1902. Each ≤40 words natural prose.
+Recipients chosen from: FRANCE, ENGLAND, RUSSIA, TURKEY, GERMANY.
+
+COMMITSPEAK (REQUIRED for any tracked promise — prose promises are NOT tracked):
+End your message with [[commit ... ]] containing one or more lines:
+  not_move_to: <prov> by <phase>
+  move_to: <unit> -> <prov> by <phase>
+  hold_at: <unit> by <phase>
+  support: <unit> S <unit> -> <prov> by <phase>
+  non_aggression: with <power> through <year>
+  demilitarize: <prov> with <power> through <year>
+  build: <kind><prov> in W<year>
+Phases like "1902-FALL-MOVES" or short "F1902". One promise per line.
+
+JSON output, this exact shape (do not add prose around the JSON):
+{"messages": [
+  {"to": ["FRA"], "public": false, "text": "<your prose>\n[[commit\n  not_move_to: MUN by 1902-SPRING-MOVES\n]]"},
+  {"to": [], "public": true, "text": "<public statement, no commitspeak required>"}
+]}
+
+--- RESPONSE ---
+```json
+{
+  "messages": [
+    {
+      "to": ["ENGLAND"],
+      "public": false,
+      "text": "England, our Channel understanding holds. Russia's Burgundy interest concerns me. Shall we confirm mutual support against continental overreach?\n[[commit\n  non_aggression: with ENGLAND through 1902\n]]"
+    },
+    {
+      "to": ["RUSSIA"],
+      "public": false,
+      "text": "Russia, your Munich restraint noted and reciprocated. Burgundy remains your sphere. I watch the Balkans—our balance endures.\n[[commit\n  not_move_to: BUR by S1902\n]]"
+    },
+    {
+      "to": ["TURKEY"],
+      "public": false,
+      "text": "Turkey, balanced growth suits us both. Your Balkan focus proceeds unmolested. Let's maintain Mediterranean equilibrium through season's end.\n[[commit\n  not_move_to: NAP by S1902\n]]"
+    }
+  ]
+}
+```

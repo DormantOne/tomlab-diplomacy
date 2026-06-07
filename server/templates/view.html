@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Diplomacy — Mind Viewer</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='view.css') }}">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+</head>
+<body>
+
+{% if error %}
+  <div class="folder-picker error">
+    <h1>Mind Viewer</h1>
+    <p class="err">{{ error }}</p>
+  </div>
+{% elif folder is none %}
+  <div class="folder-picker">
+    <h1>Mind Viewer</h1>
+    <p>Select a biopsy folder to view:</p>
+    <ul>
+      {% for f in folders %}
+        <li><a href="{{ url_for('view.view_folder', folder=f) }}">{{ f }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+{% else %}
+
+<div id="app" data-folder="{{ folder }}">
+
+  <!-- ============================================================ -->
+  <!-- TOP BAR: folder, phase scrubber, fovea toggle                -->
+  <!-- ============================================================ -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">⬡</span>
+      <span class="title">Mind Viewer</span>
+      <select id="folder-select">
+        {% for f in folders %}
+          <option value="{{ f }}" {% if f == folder %}selected{% endif %}>{{ f }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="phase-control">
+      <button id="phase-prev" title="Previous phase">◀</button>
+      <input type="range" id="phase-scrubber" min="0" max="0" value="0">
+      <button id="phase-next" title="Next phase">▶</button>
+      <span id="phase-label">—</span>
+    </div>
+
+    <div class="view-control">
+      <label class="toggle">
+        <input type="checkbox" id="fovea-toggle">
+        <span>Foveated view</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- POWER TABS                                                    -->
+  <!-- ============================================================ -->
+  <nav id="power-tabs">
+    <!-- populated by JS -->
+  </nav>
+
+  <!-- ============================================================ -->
+  <!-- MAIN: map + (graph above inspector)                          -->
+  <!-- ============================================================ -->
+  <main id="main">
+
+    <section id="map-pane">
+      <div id="map-wrap">
+        <img id="map-bg" src="{{ url_for('static', filename='map_bg.png') }}" alt="Diplomacy map">
+        <svg id="map-svg" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+    </section>
+
+    <section id="right-pane">
+      <div id="graph-pane">
+        <svg id="graph-svg"></svg>
+        <div id="graph-legend">
+          <span><span class="dot self"></span>self</span>
+          <span><span class="dot power"></span>power</span>
+          <span><span class="dot belief-active"></span>belief (active)</span>
+          <span><span class="dot belief-proto"></span>belief (proto)</span>
+          <span><span class="dot prediction"></span>prediction</span>
+          <span><span class="dot intent"></span>intent</span>
+        </div>
+      </div>
+      <div id="inspector-pane">
+        <div id="character-card">
+          <div class="archetype" id="char-archetype">—</div>
+          <div class="brief" id="char-brief">Select a power to see its character.</div>
+          <div class="stats" id="char-stats"></div>
+        </div>
+        <div id="inspector-detail">
+          <div class="hint">Click a node in the graph or a row below to inspect.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- BOTTOM: messages timeline                                    -->
+  <!-- ============================================================ -->
+  <footer id="messages-strip">
+    <div class="strip-header">
+      <span class="strip-title">Messages — <span id="msg-phase-label">—</span></span>
+      <span class="strip-filter">
+        <label><input type="checkbox" id="msg-filter-self" checked> from selected power</label>
+        <label><input type="checkbox" id="msg-filter-to-self" checked> to selected power</label>
+        <label><input type="checkbox" id="msg-filter-other"> all others</label>
+      </span>
+    </div>
+    <div id="msg-list"></div>
+  </footer>
+
+</div>
+
+<script src="{{ url_for('static', filename='view.js') }}"></script>
+
+{% endif %}
+</body>
+</html>
